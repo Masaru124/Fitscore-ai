@@ -85,6 +85,7 @@ export const LiveSession: React.FC<LiveSessionProps> = ({
   const fsmStateRef = useRef<"IDLE" | "IN_REP_ECCENTRIC" | "AT_PEAK" | "IN_REP_CONCENTRIC">("IDLE");
   const peakAngleReachedRef = useRef<number>(180);
   const repStartTimeRef = useRef<number>(0);
+  const isSendingFrameRef = useRef<boolean>(false);
 
   // Audio Speech Coach
   const speakVoice = useCallback(
@@ -99,7 +100,82 @@ export const LiveSession: React.FC<LiveSessionProps> = ({
     [voiceCoach]
   );
 
-  // Load MediaPipe dynamically
+  // Framing Guide when camera is active but athlete is not yet positioned
+  const drawFramingGuide = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const w = canvas.width;
+    const h = canvas.height;
+    const boxW = Math.min(w * 0.55, 360);
+    const boxH = Math.min(h * 0.85, 420);
+    const bx = (w - boxW) / 2;
+    const by = (h - boxH) / 2;
+
+    ctx.save();
+    ctx.strokeStyle = "rgba(0, 242, 254, 0.45)";
+    ctx.lineWidth = 2.5;
+    const cornerLen = 28;
+
+    // Top-left
+    ctx.beginPath();
+    ctx.moveTo(bx, by + cornerLen);
+    ctx.lineTo(bx, by);
+    ctx.lineTo(bx + cornerLen, by);
+    ctx.stroke();
+
+    // Top-right
+    ctx.beginPath();
+    ctx.moveTo(bx + boxW - cornerLen, by);
+    ctx.lineTo(bx + boxW, by);
+    ctx.lineTo(bx + boxW, by + cornerLen);
+    ctx.stroke();
+
+    // Bottom-left
+    ctx.beginPath();
+    ctx.moveTo(bx, by + boxH - cornerLen);
+    ctx.lineTo(bx, by + boxH);
+    ctx.lineTo(bx + cornerLen, by + boxH);
+    ctx.stroke();
+
+    // Bottom-right
+    ctx.beginPath();
+    ctx.moveTo(bx + boxW - cornerLen, by + boxH);
+    ctx.lineTo(bx + boxW, by + boxH);
+    ctx.lineTo(bx + boxW, by + boxH - cornerLen);
+    ctx.stroke();
+
+    // Status pill in upper center
+    const pillW = 280;
+    const pillH = 34;
+    const pillX = (w - pillW) / 2;
+    const pillY = by + 20;
+
+    ctx.fillStyle = "rgba(11, 14, 20, 0.85)";
+    ctx.strokeStyle = "rgba(0, 242, 254, 0.35)";
+    ctx.lineWidth = 1;
+    if (ctx.roundRect) {
+      ctx.beginPath();
+      ctx.roundRect(pillX, pillY, pillW, pillH, 8);
+      ctx.fill();
+      ctx.stroke();
+    } else {
+      ctx.fillRect(pillX, pillY, pillW, pillH);
+      ctx.strokeRect(pillX, pillY, pillW, pillH);
+    }
+
+    ctx.fillStyle = "#00F2FE";
+    ctx.font = "bold 11px monospace";
+    ctx.textAlign = "center";
+    ctx.fillText("POSITION FULL BODY IN FRAME", w / 2, pillY + 21);
+    ctx.restore();
+  }, []);
+
+  // Load MediaPipe dynamically (Pose solution runtime)
   useEffect(() => {
     let isMounted = true;
 
@@ -118,10 +194,8 @@ export const LiveSession: React.FC<LiveSessionProps> = ({
       });
     };
 
-    Promise.all([
-      loadScript("https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.4.1675466862/camera_utils.js"),
-      loadScript("https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/pose.js"),
-    ])
+    // Load only the official, working Pose JS runtime
+    loadScript("https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/pose.js")
       .then(() => {
         if (!isMounted) return;
         const win = window as any;
@@ -148,7 +222,7 @@ export const LiveSession: React.FC<LiveSessionProps> = ({
         }
       })
       .catch((err) => {
-        console.warn("MediaPipe CDN load deferred (using optical motion analysis fallback):", err);
+        console.warn("MediaPipe Pose load deferred:", err);
       });
 
     return () => {
@@ -158,8 +232,12 @@ export const LiveSession: React.FC<LiveSessionProps> = ({
 
   // Handle Real 33 MediaPipe Landmarks
   const handlePoseResults = (results: any) => {
-    if (!results || !results.poseLandmarks || results.poseLandmarks.length < 29) {
+    if (isDemoMode) return;
+
+    if (!results || !results.poseLandmarks || results.poseLandmarks.length < 25) {
       setUsingRealPose(false);
+      setTrackingConfidence("SEARCHING FOR ATHLETE");
+      drawFramingGuide();
       return;
     }
 
@@ -379,7 +457,7 @@ export const LiveSession: React.FC<LiveSessionProps> = ({
     }
   };
 
-  // Draw Real MediaPipe Skeleton over webcam video
+  // Draw Real MediaPipe Skeleton directly over athlete's mirrored webcam feed
   const drawRealSkeleton = (landmarks: any[], pAngle: number, sAngle: number) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -393,6 +471,7 @@ export const LiveSession: React.FC<LiveSessionProps> = ({
 
     const pt = (index: number) => {
       const l = landmarks[index];
+      if (!l) return { x: 0, y: 0, visibility: 0 };
       return {
         x: (1.0 - l.x) * w,
         y: l.y * h,
@@ -425,15 +504,16 @@ export const LiveSession: React.FC<LiveSessionProps> = ({
       [R_KNEE, R_ANKLE],
     ];
 
+    ctx.save();
     ctx.lineWidth = 4;
-    ctx.strokeStyle = activeWarning ? "#EF4444" : "#00F2FE";
-    ctx.shadowColor = activeWarning ? "#EF4444" : "#00F2FE";
+    ctx.strokeStyle = activeWarning ? "#EF4444" : (phase === "PEAK_HOLD" ? "#10B981" : "#00F2FE");
+    ctx.shadowColor = activeWarning ? "#EF4444" : (phase === "PEAK_HOLD" ? "#10B981" : "#00F2FE");
     ctx.shadowBlur = 10;
 
     bones.forEach(([i1, i2]) => {
       const p1 = pt(i1);
       const p2 = pt(i2);
-      if (p1.visibility > 0.4 && p2.visibility > 0.4) {
+      if (p1.visibility > 0.35 && p2.visibility > 0.35) {
         ctx.beginPath();
         ctx.moveTo(p1.x, p1.y);
         ctx.lineTo(p2.x, p2.y);
@@ -450,7 +530,7 @@ export const LiveSession: React.FC<LiveSessionProps> = ({
     ctx.shadowBlur = 8;
     activeJoints.forEach((idx) => {
       const p = pt(idx);
-      if (p.visibility > 0.4) {
+      if (p.visibility > 0.35) {
         ctx.beginPath();
         ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
         ctx.fill();
@@ -458,21 +538,44 @@ export const LiveSession: React.FC<LiveSessionProps> = ({
     });
 
     ctx.shadowBlur = 0;
-    const trackedJoint = pt(L_KNEE);
-    if (trackedJoint.visibility > 0.4) {
-      ctx.fillStyle = "rgba(10, 14, 24, 0.85)";
-      ctx.strokeStyle = "#00F2FE";
-      ctx.lineWidth = 1;
-      ctx.fillRect(trackedJoint.x + 12, trackedJoint.y - 12, 64, 24);
-      ctx.strokeRect(trackedJoint.x + 12, trackedJoint.y - 12, 64, 24);
 
-      ctx.fillStyle = pAngle < 100 ? "#10B981" : "#00F2FE";
-      ctx.font = "bold 11px monospace";
-      ctx.fillText(`${pAngle}° REAL`, trackedJoint.x + 16, trackedJoint.y + 4);
+    // Pick appropriate tracked joint for exercise
+    const normalizedId = exerciseId.toLowerCase();
+    let trackedJoint = pt(L_KNEE);
+    let jointLabel = "KNEE";
+    if (normalizedId.includes("curl") || normalizedId.includes("press") || normalizedId.includes("pushup")) {
+      trackedJoint = pt(L_ELBOW);
+      jointLabel = "ELBOW";
+    } else if (normalizedId.includes("deadlift") || normalizedId.includes("row")) {
+      trackedJoint = pt(L_HIP);
+      jointLabel = "HIP";
     }
+
+    if (trackedJoint.visibility > 0.35) {
+      ctx.fillStyle = "rgba(10, 14, 24, 0.85)";
+      ctx.strokeStyle = activeWarning ? "#EF4444" : (phase === "PEAK_HOLD" ? "#10B981" : "#00F2FE");
+      ctx.lineWidth = 1;
+      const bw = 90;
+      const bh = 24;
+      if (ctx.roundRect) {
+        ctx.beginPath();
+        ctx.roundRect(trackedJoint.x + 12, trackedJoint.y - 12, bw, bh, 4);
+        ctx.fill();
+        ctx.stroke();
+      } else {
+        ctx.fillRect(trackedJoint.x + 12, trackedJoint.y - 12, bw, bh);
+        ctx.strokeRect(trackedJoint.x + 12, trackedJoint.y - 12, bw, bh);
+      }
+
+      ctx.fillStyle = phase === "PEAK_HOLD" ? "#10B981" : "#00F2FE";
+      ctx.font = "bold 11px monospace";
+      ctx.textAlign = "left";
+      ctx.fillText(`${pAngle}° ${jointLabel}`, trackedJoint.x + 18, trackedJoint.y + 4);
+    }
+    ctx.restore();
   };
 
-  // Optical Frame Motion Engine (Runs on webcam video feed)
+  // Webcam Video Frame Feeder & Pose Processor
   useEffect(() => {
     if (!cameraActive || isDemoMode) return;
 
@@ -480,62 +583,32 @@ export const LiveSession: React.FC<LiveSessionProps> = ({
     const video = videoRef.current;
     if (!video) return;
 
-    if (!offscreenCanvasRef.current) {
-      const off = document.createElement("canvas");
-      off.width = 64;
-      off.height = 48;
-      offscreenCanvasRef.current = off;
-    }
-
-    const offCanvas = offscreenCanvasRef.current;
-    const offCtx = offCanvas.getContext("2d", { willReadFrequently: true });
-
-    const analyzeMotion = () => {
-      if (video.readyState >= 2 && offCtx) {
-        if (poseRef.current && !usingRealPose) {
-          try {
-            poseRef.current.send({ image: video });
-          } catch {
-            // continue
-          }
+    const pumpFrame = () => {
+      if (video.readyState >= 2) {
+        // Send frame to MediaPipe Pose if loaded and ready
+        if (poseRef.current && !isSendingFrameRef.current) {
+          isSendingFrameRef.current = true;
+          poseRef.current
+            .send({ image: video })
+            .catch(() => {})
+            .finally(() => {
+              isSendingFrameRef.current = false;
+            });
         }
-
-        offCtx.drawImage(video, 0, 0, offCanvas.width, offCanvas.height);
-        const frame = offCtx.getImageData(0, 0, offCanvas.width, offCanvas.height);
-        const data = frame.data;
-
-        if (prevFrameDataRef.current) {
-          let deltaSum = 0;
-          const prev = prevFrameDataRef.current;
-          for (let i = 0; i < data.length; i += 4) {
-            deltaSum += Math.abs(data[i] - prev[i]);
-          }
-          const normalizedDiff = Math.min(100, Math.round(deltaSum / 3500));
-          setMotionEnergy(normalizedDiff);
-
-          // If no real MediaPipe landmarks, drive realistic exercise angles ONLY when user actively moves
-          if (!usingRealPose && isLive) {
-            if (normalizedDiff > 14) {
-              setTrackingConfidence("MOTION ACTIVATED");
-              const simulatedInflection = Math.max(80, 170 - normalizedDiff * 1.1);
-              setPrimaryAngle(Math.round(simulatedInflection));
-              processFsmRepLogic(Math.round(simulatedInflection), Math.round(simulatedInflection + 2), 80);
-            } else {
-              // User is standing still! Angle stays at resting 170°, rep counter NEVER advances!
-              setPrimaryAngle(170);
-              setPhase("IDLE");
-              fsmStateRef.current = "IDLE";
-            }
-          }
-        }
-        prevFrameDataRef.current = new Uint8ClampedArray(data);
       }
-      animFrame = requestAnimationFrame(analyzeMotion);
+      animFrame = requestAnimationFrame(pumpFrame);
     };
 
-    animFrame = requestAnimationFrame(analyzeMotion);
+    animFrame = requestAnimationFrame(pumpFrame);
     return () => cancelAnimationFrame(animFrame);
-  }, [cameraActive, isDemoMode, isLive, usingRealPose]);
+  }, [cameraActive, isDemoMode]);
+
+  // Render framing guide while waiting for athlete body detection
+  useEffect(() => {
+    if (cameraActive && !isDemoMode && !usingRealPose) {
+      drawFramingGuide();
+    }
+  }, [cameraActive, isDemoMode, usingRealPose, drawFramingGuide]);
 
   // Start Camera
   const startCamera = async () => {
@@ -598,9 +671,9 @@ export const LiveSession: React.FC<LiveSessionProps> = ({
     });
   };
 
-  // EXERCISE-SPECIFIC SYNTHETIC EXOSKELETON RENDERER (Used in Demo Mode or when calibrating)
+  // EXERCISE-SPECIFIC SYNTHETIC EXOSKELETON RENDERER (Strictly used ONLY in Demo Sandbox Mode)
   useEffect(() => {
-    if (usingRealPose && cameraActive && !isDemoMode) return;
+    if (!isDemoMode) return; // STRICT GUARD: Never render synthetic skeleton in real camera mode!
 
     const canvas = canvasRef.current;
     if (!canvas) return;
