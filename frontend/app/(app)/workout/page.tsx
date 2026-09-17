@@ -209,6 +209,7 @@ export default function WorkoutPage() {
           exerciseId={selectedExercise.id}
           exerciseCategory={selectedExercise.category}
           targetReps={targetReps}
+          exerciseDepth={selectedExercise.targetDepth}
         />
       </div>
     );

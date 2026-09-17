@@ -14,11 +14,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className="dark">
-      <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-      </head>
-      <body>{children}</body>
+    <html lang="en" className="dark" suppressHydrationWarning>
+      <body suppressHydrationWarning>
+        <main id="app-root" className="w-full min-h-screen">
+          {children}
+        </main>
+      </body>
     </html>
   );
 }

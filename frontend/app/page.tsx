@@ -1,6 +1,4 @@
-"use client";
-
-import React, { useState } from "react";
+import React from "react";
 import Link from "next/link";
 import {
   Activity,
@@ -24,33 +22,14 @@ import {
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
+import { ProtocolShowcase } from "@/components/landing/ProtocolShowcase";
 
 export default function LandingPage() {
-  const [activeCategory, setActiveCategory] = useState("all");
-
-  const protocols = [
-    { name: "Barbell Back Squat", category: "lower", depth: "85° Knee Flexion", level: "Intermediate", target: "Quadriceps & Glutes" },
-    { name: "Conventional Deadlift", category: "posterior", depth: "180° Full Lockout", level: "Advanced", target: "Posterior Chain" },
-    { name: "Overhead Dumbbell Press", category: "upper", depth: "175° Arm Extension", level: "Intermediate", target: "Deltoids & Trapezius" },
-    { name: "Standard Push-Up", category: "upper", depth: "90° Elbow Flexion", level: "Beginner", target: "Pectorals & Triceps" },
-    { name: "Front Squat", category: "lower", depth: "80° Knee Angle", level: "Advanced", target: "Anterior Core & Quads" },
-    { name: "Romanian Deadlift (RDL)", category: "posterior", depth: "75° Hip Hinge", level: "Intermediate", target: "Hamstrings & Lower Back" },
-    { name: "Isometric Forearm Plank", category: "core", depth: "180° Neutral Line", level: "Beginner", target: "Transverse Abdominis" },
-    { name: "Dumbbell Lateral Raise", category: "upper", depth: "90° Shoulder Abduction", level: "Beginner", target: "Lateral Deltoids" },
-  ];
-
-  const filteredProtocols =
-    activeCategory === "all"
-      ? protocols
-      : protocols.filter((p) => p.category === activeCategory);
-
   return (
     <div className="min-h-screen bg-[#06080D] text-slate-100 selection:bg-cyan-500 selection:text-black relative overflow-hidden">
-      {/* Background Ambient Glow Meshes */}
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1200px] h-[650px] bg-gradient-to-b from-cyan-500/12 via-blue-600/5 to-transparent blur-[120px] pointer-events-none -z-10" />
       <div className="absolute top-[800px] right-0 w-[500px] h-[500px] bg-indigo-600/8 blur-[140px] pointer-events-none -z-10" />
 
-      {/* Floating Island Navigation */}
       <header className="sticky top-6 z-50 max-w-6xl mx-auto px-4">
         <div className="h-16 rounded-full bg-[#0E1422]/80 backdrop-blur-2xl border border-white/[0.08] px-6 flex items-center justify-between shadow-2xl shadow-black/60">
           <Link href="/" className="flex items-center gap-3 group">
@@ -96,10 +75,7 @@ export default function LandingPage() {
 
         {/* Main Value Proposition Title */}
         <h1 className="text-4xl sm:text-6xl lg:text-7xl font-black text-white tracking-tight leading-[1.08] max-w-5xl mx-auto mb-6">
-          Real-Time Exercise Quality &amp;{" "}
-          <span className="bg-gradient-to-r from-cyan-400 via-blue-400 to-indigo-400 bg-clip-text text-transparent">
-            Dynamic Injury Prevention
-          </span>
+          Real-Time Exercise Quality &amp; <span className="bg-gradient-to-r from-cyan-400 via-blue-400 to-indigo-400 bg-clip-text text-transparent">Dynamic Injury Prevention</span>
         </h1>
 
         <p className="text-base sm:text-lg text-slate-400 max-w-3xl mx-auto leading-relaxed mb-10">
@@ -373,64 +349,19 @@ export default function LandingPage() {
 
       {/* Supported Protocols Showcase */}
       <section id="protocols" className="py-24 px-6 max-w-6xl mx-auto border-t border-white/[0.06]">
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12">
-          <div>
-            <p className="text-xs font-mono font-bold uppercase tracking-widest text-cyan-400 mb-2">
-              EXERCISE PROTOCOLS
-            </p>
-            <h2 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
-              19 Validated Biomechanical Models
-            </h2>
-            <p className="text-sm text-slate-400 mt-2">
-              Trained on multi-angle kinetic video recordings with clinical ground truth.
-            </p>
-          </div>
-
-          {/* Category Tabs */}
-          <div className="flex items-center gap-1.5 p-1 rounded-full bg-[#0F1524] border border-white/[0.08] overflow-x-auto">
-            {[
-              { id: "all", label: "All Models" },
-              { id: "lower", label: "Lower Body" },
-              { id: "posterior", label: "Posterior" },
-              { id: "upper", label: "Upper Body" },
-              { id: "core", label: "Core" },
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveCategory(tab.id)}
-                className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
-                  activeCategory === tab.id
-                    ? "bg-cyan-500 text-black shadow-md shadow-cyan-500/20 font-bold"
-                    : "text-slate-400 hover:text-white"
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
+        <div className="mb-12">
+          <p className="text-xs font-mono font-bold uppercase tracking-widest text-cyan-400 mb-2">
+            EXERCISE PROTOCOLS
+          </p>
+          <h2 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
+            19 Validated Biomechanical Models
+          </h2>
+          <p className="text-sm text-slate-400 mt-2">
+            Trained on multi-angle kinetic video recordings with clinical ground truth.
+          </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {filteredProtocols.map((p, idx) => (
-            <Card key={idx} hoverEffect className="p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-mono uppercase tracking-wider text-cyan-400 font-bold">
-                  {p.level}
-                </span>
-                <span className="text-[10px] font-mono text-slate-400">{p.depth}</span>
-              </div>
-              <h4 className="text-base font-bold text-white">{p.name}</h4>
-              <p className="text-xs text-slate-400 leading-snug">{p.target}</p>
-              <Link
-                href="/workout"
-                className="inline-flex items-center gap-1 text-xs font-semibold text-cyan-400 hover:text-cyan-300 pt-1"
-              >
-                <span>Launch Protocol</span>
-                <ChevronRight className="w-3 h-3" />
-              </Link>
-            </Card>
-          ))}
-        </div>
+        <ProtocolShowcase />
       </section>
 
       {/* Footer */}

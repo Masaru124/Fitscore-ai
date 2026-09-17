@@ -21,14 +21,31 @@ import { RepCounter } from "@/components/workout/RepCounter";
 import { InjuryAlert, RiskWarning } from "@/components/workout/InjuryAlert";
 import { Button } from "@/components/ui/Button";
 
+export interface RepTelemetry {
+  rep: number;
+  score: number;
+  depthLabel: string;
+  depthAngle: string;
+  rawAngle: number;
+  tempo: string;
+  tempoSeconds: number;
+  symmetryDiscrepancy: string;
+  stabilityScore: number;
+  status: "optimal" | "warning" | "caution";
+  statusText: string;
+  issue?: string;
+  timestamp: string;
+}
+
 interface LiveSessionProps {
   exerciseName?: string;
   exerciseId?: string;
   exerciseCategory?: string;
   targetReps?: number;
+  exerciseDepth?: string;
 }
 
-// 2D Vector Angle Calculator
+// High-Precision 2D Vector Angle Calculator
 function calculateAngle(
   a: { x: number; y: number },
   b: { x: number; y: number }, // vertex
@@ -39,7 +56,7 @@ function calculateAngle(
   if (angle > 180.0) {
     angle = 360.0 - angle;
   }
-  return Math.round(angle);
+  return Number(angle.toFixed(1));
 }
 
 export const LiveSession: React.FC<LiveSessionProps> = ({
@@ -47,6 +64,7 @@ export const LiveSession: React.FC<LiveSessionProps> = ({
   exerciseId = "squat",
   exerciseCategory = "Lower Body",
   targetReps = 10,
+  exerciseDepth = "85° Knee Depth",
 }) => {
   const router = useRouter();
 
@@ -69,6 +87,7 @@ export const LiveSession: React.FC<LiveSessionProps> = ({
   const [reps, setReps] = useState(0);
   const [phase, setPhase] = useState<"ECCENTRIC" | "CONCENTRIC" | "PEAK_HOLD" | "IDLE">("IDLE");
   const [activeWarning, setActiveWarning] = useState<RiskWarning | null>(null);
+  const [repsLog, setRepsLog] = useState<RepTelemetry[]>([]);
 
   // Real-Time Measured Biomechanical Angles
   const [primaryAngle, setPrimaryAngle] = useState(170);
@@ -86,6 +105,7 @@ export const LiveSession: React.FC<LiveSessionProps> = ({
   const peakAngleReachedRef = useRef<number>(180);
   const repStartTimeRef = useRef<number>(0);
   const isSendingFrameRef = useRef<boolean>(false);
+  const handlePoseResultsRef = useRef<(results: any) => void>(() => {});
 
   // Audio Speech Coach
   const speakVoice = useCallback(
@@ -149,8 +169,15 @@ export const LiveSession: React.FC<LiveSessionProps> = ({
     ctx.lineTo(bx + boxW, by + boxH - cornerLen);
     ctx.stroke();
 
+    const normalizedId = exerciseId.toLowerCase();
+    const isUpper =
+      normalizedId.includes("curl") ||
+      normalizedId.includes("press") ||
+      normalizedId.includes("lateral") ||
+      normalizedId.includes("raise");
+
     // Status pill in upper center
-    const pillW = 280;
+    const pillW = isUpper ? 320 : 340;
     const pillH = 34;
     const pillX = (w - pillW) / 2;
     const pillY = by + 20;
@@ -171,9 +198,15 @@ export const LiveSession: React.FC<LiveSessionProps> = ({
     ctx.fillStyle = "#00F2FE";
     ctx.font = "bold 11px monospace";
     ctx.textAlign = "center";
-    ctx.fillText("POSITION FULL BODY IN FRAME", w / 2, pillY + 21);
+    ctx.fillText(
+      isUpper
+        ? "DESK / UPPER BODY: HEAD & ARMS IN FRAME"
+        : "FULL BODY: STEP 6-8 FT BACK OR TILT WEBCAM",
+      w / 2,
+      pillY + 21
+    );
     ctx.restore();
-  }, []);
+  }, [exerciseId]);
 
   // Load MediaPipe dynamically (Pose solution runtime)
   useEffect(() => {
@@ -205,16 +238,16 @@ export const LiveSession: React.FC<LiveSessionProps> = ({
           });
 
           pose.setOptions({
-            modelComplexity: 1,
+            modelComplexity: 0,
             smoothLandmarks: true,
             enableSegmentation: false,
-            minDetectionConfidence: 0.5,
-            minTrackingConfidence: 0.5,
+            minDetectionConfidence: 0.3,
+            minTrackingConfidence: 0.3,
           });
 
           pose.onResults((results: any) => {
             if (!isMounted) return;
-            handlePoseResults(results);
+            handlePoseResultsRef.current?.(results);
           });
 
           poseRef.current = pose;
@@ -230,11 +263,33 @@ export const LiveSession: React.FC<LiveSessionProps> = ({
     };
   }, []);
 
+  // Update ref on each render
+  handlePoseResultsRef.current = (results: any) => handlePoseResults(results);
+
   // Handle Real 33 MediaPipe Landmarks
   const handlePoseResults = (results: any) => {
     if (isDemoMode) return;
 
-    if (!results || !results.poseLandmarks || results.poseLandmarks.length < 25) {
+    const lm = results?.poseLandmarks;
+    if (!lm || lm.length < 17) {
+      setUsingRealPose(false);
+      setTrackingConfidence("SEARCHING FOR ATHLETE");
+      drawFramingGuide();
+      return;
+    }
+
+    const normalizedId = exerciseId.toLowerCase();
+    const isUpperBodyOnly =
+      normalizedId.includes("curl") ||
+      normalizedId.includes("press") ||
+      normalizedId.includes("lateral") ||
+      normalizedId.includes("raise");
+
+    // Landmarks 11 & 12 are shoulders; 23 & 24 are hips; 25 & 26 are knees
+    const upperVis = (lm[11]?.visibility ?? 1.0) > 0.25 || (lm[12]?.visibility ?? 1.0) > 0.25 || (lm[0]?.visibility ?? 1.0) > 0.25;
+    const lowerVis = (lm[25]?.visibility ?? 1.0) > 0.25 || (lm[26]?.visibility ?? 1.0) > 0.25;
+
+    if (!upperVis && !lowerVis) {
       setUsingRealPose(false);
       setTrackingConfidence("SEARCHING FOR ATHLETE");
       drawFramingGuide();
@@ -242,8 +297,13 @@ export const LiveSession: React.FC<LiveSessionProps> = ({
     }
 
     setUsingRealPose(true);
-    setTrackingConfidence("LOCKED (33 LANDMARKS)");
-    const lm = results.poseLandmarks;
+    if (isUpperBodyOnly) {
+      setTrackingConfidence("DESK / UPPER BODY LOCKED");
+    } else if (!lowerVis) {
+      setTrackingConfidence("LEGS TRUNCATED (STEP 6-8 FT BACK FOR SQUATS)");
+    } else {
+      setTrackingConfidence("FULL BODY LOCKED (33 LANDMARKS)");
+    }
 
     // Extract anatomical coordinates
     const leftHip = lm[23];
@@ -265,8 +325,6 @@ export const LiveSession: React.FC<LiveSessionProps> = ({
     let currPrimary = 170;
     let currSecondary = 170;
     let currSpine = 85;
-
-    const normalizedId = exerciseId.toLowerCase();
 
     if (normalizedId.includes("squat") || normalizedId.includes("lunge")) {
       // Squats & Lunges: Track Knee Flexion
@@ -306,6 +364,139 @@ export const LiveSession: React.FC<LiveSessionProps> = ({
 
     // Draw real landmarks onto canvas
     drawRealSkeleton(results.poseLandmarks, currPrimary, currSecondary);
+  };
+
+  // High-Precision Clinical Per-Rep Telemetry Logger
+  const recordCompletedRep = (
+    repNum: number,
+    peakAngle: number,
+    targetDepth: number,
+    repDuration: number,
+    secondaryAngle: number,
+    currentSpine: number,
+    exerciseKey: string
+  ) => {
+    const diff = Number(Math.abs(peakAngle - secondaryAngle).toFixed(1));
+    const cleanDuration = Number(repDuration.toFixed(2));
+    const cleanPeak = Number(peakAngle.toFixed(1));
+
+    // 1. Range of Motion (35% Weight)
+    const romDist = Math.abs(cleanPeak - targetDepth);
+    const romScore = Math.min(100, Math.max(60, Math.round(100 - romDist * 1.5)));
+
+    // 2. Tempo & Cadence (25% Weight): 2.0s - 3.2s optimal eccentric window
+    let tempoScore = 95;
+    if (cleanDuration >= 2.0 && cleanDuration <= 3.2) {
+      tempoScore = 100;
+    } else if (cleanDuration < 2.0) {
+      tempoScore = Math.max(60, Math.round(100 - (2.0 - cleanDuration) * 35));
+    } else {
+      tempoScore = Math.max(65, Math.round(100 - (cleanDuration - 3.2) * 15));
+    }
+
+    // 3. Bilateral Symmetry (20% Weight): Discrepancy under 6.0° is optimal
+    const symScore = diff <= 6.0 ? 100 : Math.max(50, Math.round(100 - (diff - 6.0) * 4));
+
+    // 4. Spinal Stability (20% Weight): Sagittal neutrality
+    const stabScore = Math.min(100, Math.max(70, Math.round(98 - Math.abs(currentSpine - 85) * 0.9)));
+
+    // Composite FitScore Index (0 - 100)
+    const calculatedFitScore = Math.min(
+      100,
+      Math.max(65, Math.round(romScore * 0.35 + tempoScore * 0.25 + symScore * 0.2 + stabScore * 0.2))
+    );
+
+    // Dynamic Depth Label
+    let depthText = `${cleanPeak.toFixed(1)}°`;
+    if (exerciseKey.includes("squat")) {
+      depthText = `${cleanPeak.toFixed(1)}° Hip Depth`;
+    } else if (exerciseKey.includes("deadlift") || exerciseKey.includes("hinge")) {
+      depthText = `${cleanPeak.toFixed(1)}° Hip Hinge`;
+    } else if (exerciseKey.includes("curl")) {
+      depthText = `${cleanPeak.toFixed(1)}° Elbow Flex`;
+    } else if (exerciseKey.includes("press")) {
+      depthText = `${cleanPeak.toFixed(1)}° Lockout`;
+    } else if (exerciseKey.includes("pushup")) {
+      depthText = `${cleanPeak.toFixed(1)}° Chest Depth`;
+    }
+
+    // Clinical Diagnostics & Status
+    let status: "optimal" | "warning" | "caution" = "optimal";
+    let statusText = "Optimal";
+    let issue: string | undefined = undefined;
+
+    if (diff > 12.0 && exerciseKey.includes("squat")) {
+      status = "warning";
+      statusText = `Knee Valgus (Δ ${diff.toFixed(1)}°)`;
+      issue = "Knee Valgus drift";
+    } else if (cleanDuration < 1.8) {
+      status = "caution";
+      statusText = `Fast Tempo (${cleanDuration}s)`;
+      issue = "Rushed eccentric";
+    } else if (romDist > 12.0 && cleanPeak > targetDepth) {
+      status = "caution";
+      statusText = `Partial Depth (${cleanPeak.toFixed(1)}°)`;
+      issue = "Short of target depth";
+    } else if (calculatedFitScore >= 90) {
+      status = "optimal";
+      statusText = "Optimal";
+    } else {
+      status = "optimal";
+      statusText = "Good Consistency";
+    }
+
+    const newRecord: RepTelemetry = {
+      rep: repNum,
+      score: calculatedFitScore,
+      depthLabel: depthText,
+      depthAngle: `${cleanPeak.toFixed(1)}°`,
+      rawAngle: cleanPeak,
+      tempo: `${cleanDuration}s`,
+      tempoSeconds: cleanDuration,
+      symmetryDiscrepancy: `Δ ${diff.toFixed(1)}°`,
+      stabilityScore: stabScore,
+      status,
+      statusText,
+      issue,
+      timestamp: new Date().toLocaleTimeString([], { minute: "2-digit", second: "2-digit" }),
+    };
+
+    setRepsLog((prev) => {
+      const updated = [newRecord, ...prev];
+      if (typeof window !== "undefined") {
+        try {
+          localStorage.setItem(
+            "fitscore_latest_session",
+            JSON.stringify({
+              id: `sess_${Date.now()}`,
+              exercise: exerciseName,
+              exerciseId,
+              date: new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }),
+              totalReps: updated.length,
+              overallScore: calculatedFitScore,
+              metrics: [
+                { name: "Range of Motion (ROM)", score: romScore, weight: "35%", note: `Recorded ${depthText}` },
+                { name: "Rep Tempo & Cadence", score: tempoScore, weight: "25%", note: `Averaged ${cleanDuration}s` },
+                { name: "Bilateral Symmetry", score: symScore, weight: "20%", note: `Discrepancy Δ ${diff.toFixed(1)}°` },
+                { name: "Joint Stability", score: stabScore, weight: "20%", note: `Spinal neutrality ${currentSpine.toFixed(1)}°` },
+              ],
+              reps: updated.map((r) => ({
+                rep: r.rep,
+                score: r.score,
+                depth: r.depthAngle,
+                tempo: r.tempo,
+                status: r.status,
+                issue: r.issue,
+              })),
+            })
+          );
+        } catch (e) {}
+      }
+      return updated;
+    });
+
+    setScore(calculatedFitScore);
+    return { calculatedFitScore, statusText, diff };
   };
 
   // STRICT FINITE STATE MACHINE (FSM) REP COUNTER
@@ -378,24 +569,30 @@ export const LiveSession: React.FC<LiveSessionProps> = ({
 
             setReps((prev) => {
               const newReps = prev + 1;
-              const repScore = Math.min(100, Math.max(78, Math.round(98 - Math.abs(peakAngleReachedRef.current - targetDepth) * 0.4)));
-              setScore(repScore);
+              const { calculatedFitScore, statusText, diff } = recordCompletedRep(
+                newReps,
+                peakAngleReachedRef.current,
+                targetDepth,
+                repDuration,
+                secondary,
+                spine,
+                normalizedId
+              );
 
               // Check injury guard
-              const diff = Math.abs(primary - secondary);
               if (diff > 14 && normalizedId.includes("squat")) {
                 setActiveWarning({
                   id: String(Date.now()),
                   type: "knee_valgus",
                   title: "Knee Asymmetry Warning",
-                  message: `Bilateral difference: ${diff.toFixed(0)}°. Drive knees outward in line with toes.`,
+                  message: `Bilateral difference: ${diff.toFixed(1)}°. Drive knees outward in line with toes.`,
                   severity: "medium",
                   timestamp: "Just now",
                 });
                 speakVoice("Watch your knees, push outward!");
               } else {
                 setActiveWarning(null);
-                speakVoice(`Rep ${newReps}! ${newReps === targetReps ? "Target achieved!" : "Great form."}`);
+                speakVoice(`Rep ${newReps}! ${newReps === targetReps ? "Target achieved!" : statusText}`);
               }
               return newReps;
             });
@@ -441,14 +638,23 @@ export const LiveSession: React.FC<LiveSessionProps> = ({
         case "IN_REP_ECCENTRIC":
           if (primary <= restingShelf + 10) {
             // Completed Overhead Rep!
+            const repDuration = (Date.now() - repStartTimeRef.current) / 1000;
             fsmStateRef.current = "IDLE";
             setPhase("IDLE");
 
             setReps((prev) => {
               const newReps = prev + 1;
-              setScore(94);
+              const { calculatedFitScore, statusText } = recordCompletedRep(
+                newReps,
+                peakAngleReachedRef.current,
+                targetLockout,
+                repDuration,
+                secondary,
+                spine,
+                normalizedId
+              );
               setActiveWarning(null);
-              speakVoice(`Rep ${newReps}! Clean overhead lockout.`);
+              speakVoice(`Rep ${newReps}! ${statusText}`);
               return newReps;
             });
           }
@@ -584,13 +790,15 @@ export const LiveSession: React.FC<LiveSessionProps> = ({
     if (!video) return;
 
     const pumpFrame = () => {
-      if (video.readyState >= 2) {
+      if (video.readyState >= 2 && video.videoWidth > 0 && !video.paused) {
         // Send frame to MediaPipe Pose if loaded and ready
         if (poseRef.current && !isSendingFrameRef.current) {
           isSendingFrameRef.current = true;
           poseRef.current
             .send({ image: video })
-            .catch(() => {})
+            .catch((err: any) => {
+              console.warn("MediaPipe frame send error:", err);
+            })
             .finally(() => {
               isSendingFrameRef.current = false;
             });
@@ -666,7 +874,19 @@ export const LiveSession: React.FC<LiveSessionProps> = ({
   const triggerManualSimulatedRep = () => {
     setReps((r) => {
       const next = r + 1;
-      speakVoice(`Simulated Rep ${next}`);
+      const simDuration = +(2.2 + (Math.random() * 0.4 - 0.2)).toFixed(2);
+      const simDepth = +(84.2 + (Math.random() * 2.5 - 1.2)).toFixed(1);
+      const simDiff = +(1.4 + (Math.random() * 1.2)).toFixed(1);
+      const { statusText } = recordCompletedRep(
+        next,
+        simDepth,
+        85,
+        simDuration,
+        simDepth + simDiff,
+        84.8,
+        exerciseId.toLowerCase()
+      );
+      speakVoice(`Simulated Rep ${next}! ${statusText}`);
       return next;
     });
   };
@@ -1106,6 +1326,83 @@ export const LiveSession: React.FC<LiveSessionProps> = ({
               )}
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Live Rep-by-Rep Precision Biomechanics Table */}
+      <div className="p-[1px] rounded-2xl bg-gradient-to-b from-white/[0.12] to-white/[0.02] shadow-xl shadow-black/40">
+        <div className="rounded-[calc(1rem-1px)] bg-[#0C111E] p-6 space-y-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pb-3 border-b border-white/[0.08]">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-cyan-400" />
+              <h3 className="text-sm font-bold text-white tracking-tight">
+                Live Rep-by-Rep Precision Telemetry Log
+              </h3>
+            </div>
+            <div className="flex items-center gap-3 text-xs font-mono">
+              <span className="text-slate-400">Target Depth: <strong className="text-cyan-400">{exerciseDepth}</strong></span>
+              <span className="text-slate-600">•</span>
+              <span className="text-slate-400">Total Recorded: <strong className="text-white">{repsLog.length} Reps</strong></span>
+            </div>
+          </div>
+
+          {repsLog.length === 0 ? (
+            <div className="text-center py-8 text-xs text-slate-500 font-mono flex flex-col items-center justify-center gap-2">
+              <Activity className="w-5 h-5 text-slate-600 animate-pulse" />
+              <span>Perform your first repetition on camera to begin real-time precision telemetry recording...</span>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs text-slate-300">
+                <thead className="text-[10px] uppercase font-semibold text-slate-500 border-b border-white/[0.08]">
+                  <tr>
+                    <th className="pb-2.5">Rep #</th>
+                    <th className="pb-2.5">FitScore</th>
+                    <th className="pb-2.5">Hip / Joint Depth</th>
+                    <th className="pb-2.5">Tempo</th>
+                    <th className="pb-2.5">Bilateral Symmetry</th>
+                    <th className="pb-2.5">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/[0.06]">
+                  {repsLog.map((r) => (
+                    <tr key={r.rep} className="hover:bg-[#151C2C]/50 transition-colors">
+                      <td className="py-3 font-mono font-bold text-white">Rep {r.rep}</td>
+                      <td className="py-3 font-mono font-bold">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold ${
+                          r.score >= 90
+                            ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30"
+                            : r.score >= 80
+                            ? "bg-cyan-500/10 text-cyan-400 border border-cyan-500/30"
+                            : "bg-amber-500/10 text-amber-400 border border-amber-500/30"
+                        }`}>
+                          {r.score}
+                        </span>
+                      </td>
+                      <td className="py-3 font-mono text-cyan-300 font-medium">{r.depthLabel}</td>
+                      <td className="py-3 font-mono text-slate-300">{r.tempo}</td>
+                      <td className="py-3 font-mono text-slate-400">{r.symmetryDiscrepancy}</td>
+                      <td className="py-3">
+                        {r.status === "optimal" ? (
+                          <span className="inline-flex items-center gap-1.5 text-[11px] text-emerald-400 font-semibold">
+                            <CheckCircle2 className="w-3.5 h-3.5" /> {r.statusText}
+                          </span>
+                        ) : r.status === "warning" ? (
+                          <span className="inline-flex items-center gap-1.5 text-[11px] text-red-400 font-semibold">
+                            <AlertTriangle className="w-3.5 h-3.5" /> {r.statusText}
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 text-[11px] text-amber-400 font-semibold">
+                            <AlertTriangle className="w-3.5 h-3.5" /> {r.statusText}
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
     </div>
