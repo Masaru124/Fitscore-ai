@@ -1,0 +1,61 @@
+{
+  "steps": [
+    {
+      "name": "Landing Page",
+      "status": "OK"
+    },
+    {
+      "name": "User Registration",
+      "status": "OK",
+      "email": "marcus.vance.1789612650775@fitscore.ai"
+    },
+    {
+      "name": "User Login",
+      "status": "OK"
+    },
+    {
+      "name": "Dashboard View",
+      "status": "OK"
+    },
+    {
+      "name": "Workout Selector",
+      "status": "OK"
+    },
+    {
+      "name": "Live Session HUD",
+      "status": "OK"
+    },
+    {
+      "name": "Session Autopsy Detail",
+      "status": "OK"
+    },
+    {
+      "name": "Workout History",
+      "status": "OK"
+    },
+    {
+      "name": "Reports and Analytics",
+      "status": "OK"
+    },
+    {
+      "name": "User Profile & Settings",
+      "status": "OK"
+    },
+    {
+      "name": "Mobile Viewport Test",
+      "status": "OK"
+    },
+    {
+      "name": "Sign Out Session & Cookie Erasure",
+      "status": "OK"
+    }
+  ],
+  "newUser": {
+    "fullName": "Dr. Marcus Vance",
+    "email": "marcus.vance.1789612650775@fitscore.ai",
+    "password": "Kinetics2026!Master"
+  },
+  "status": "PASSED",
+  "startTime": "2026-09-17T02:37:28.671Z",
+  "endTime": "2026-09-17T02:37:53.147Z"
+}

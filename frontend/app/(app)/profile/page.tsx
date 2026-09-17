@@ -9,8 +9,8 @@ import { Button } from "@/components/ui/Button";
 // ponytail: Lean user profile settings with instant local feedback and zero unnecessary state stores
 export default function ProfilePage() {
   const [saved, setSaved] = useState(false);
-  const [name, setName] = useState("Alex Rivers");
-  const [email, setEmail] = useState("alex@fitscore.ai");
+  const [name, setName] = useState("Dr. Marcus Vance");
+  const [email, setEmail] = useState("marcus.vance@fitscore.ai");
   const [height, setHeight] = useState("180");
   const [weight, setWeight] = useState("78");
   const [experience, setExperience] = useState("Advanced");

@@ -1,10 +1,10 @@
 import React from "react";
 
-// ponytail: Lean, accessible button with variant styling and loading state
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: "primary" | "secondary" | "danger" | "ghost" | "outline";
+  variant?: "primary" | "secondary" | "danger" | "ghost" | "outline" | "glow";
   size?: "sm" | "md" | "lg";
   isLoading?: boolean;
+  trailingIcon?: React.ReactNode;
 }
 
 export const Button: React.FC<ButtonProps> = ({
@@ -12,30 +12,33 @@ export const Button: React.FC<ButtonProps> = ({
   variant = "primary",
   size = "md",
   isLoading = false,
+  trailingIcon,
   className = "",
   disabled,
   ...props
 }) => {
   const baseStyles =
-    "inline-flex items-center justify-center font-medium rounded-lg transition-all duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-offset-2";
+    "group relative inline-flex items-center justify-center font-semibold rounded-full transition-all duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed select-none active:scale-[0.98]";
 
   const sizeStyles = {
-    sm: "px-3 py-1.5 text-xs gap-1.5",
-    md: "px-4 py-2 text-sm gap-2",
-    lg: "px-6 py-3 text-base gap-2.5",
+    sm: "px-3.5 py-1.5 text-xs gap-1.5",
+    md: "px-5 py-2.5 text-sm gap-2.5",
+    lg: "px-7 py-3.5 text-base gap-3",
   }[size];
 
   const variantStyles = {
     primary:
-      "bg-gradient-to-r from-cyan-500 to-blue-600 text-white hover:from-cyan-400 hover:to-blue-500 shadow-md shadow-cyan-500/20 focus:ring-cyan-400",
+      "bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white shadow-lg shadow-cyan-500/25 border border-cyan-400/20",
+    glow:
+      "bg-cyan-500 hover:bg-cyan-400 text-black shadow-lg shadow-cyan-500/30 border border-cyan-300/40 font-bold",
     secondary:
-      "bg-[#1A2234] text-slate-200 border border-[#232D42] hover:bg-[#222B42] hover:border-[#3B4B6E] focus:ring-slate-400",
+      "bg-[#141A28] text-slate-200 border border-white/10 hover:bg-[#1A2234] hover:border-cyan-500/40 hover:text-white shadow-md shadow-black/30",
     danger:
-      "bg-red-600 text-white hover:bg-red-500 shadow-md shadow-red-600/20 focus:ring-red-500",
+      "bg-red-500/15 border border-red-500/30 text-red-400 hover:bg-red-500 hover:text-white shadow-md shadow-red-500/20",
     ghost:
-      "bg-transparent text-slate-300 hover:bg-[#1A2234] hover:text-white focus:ring-slate-500",
+      "bg-transparent text-slate-300 hover:bg-white/[0.06] hover:text-white",
     outline:
-      "bg-transparent border border-cyan-500/50 text-cyan-400 hover:bg-cyan-500/10 focus:ring-cyan-400",
+      "bg-transparent border border-cyan-500/40 text-cyan-400 hover:bg-cyan-500/10 hover:border-cyan-400",
   }[variant];
 
   return (
@@ -44,29 +47,21 @@ export const Button: React.FC<ButtonProps> = ({
       disabled={disabled || isLoading}
       {...props}
     >
-      {isLoading && (
-        <svg
-          className="animate-spin -ml-1 mr-2 h-4 w-4 text-current"
-          xmlns="http://www.w3.org/2000/svg"
-          fill="none"
-          viewBox="0 0 24 24"
-        >
-          <circle
-            className="opacity-25"
-            cx="12"
-            cy="12"
-            r="10"
-            stroke="currentColor"
-            strokeWidth="4"
-          />
-          <path
-            className="opacity-75"
-            fill="currentColor"
-            d="M4 12a8 8 0 018-8v8H4z"
-          />
-        </svg>
+      {isLoading ? (
+        <span className="inline-flex items-center gap-2">
+          <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+          <span>Processing...</span>
+        </span>
+      ) : (
+        <>
+          <span>{children}</span>
+          {trailingIcon && (
+            <span className="w-6 h-6 rounded-full bg-white/15 dark:bg-white/10 flex items-center justify-center transition-transform duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5">
+              {trailingIcon}
+            </span>
+          )}
+        </>
       )}
-      {children}
     </button>
   );
 };

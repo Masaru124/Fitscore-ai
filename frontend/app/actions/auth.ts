@@ -32,6 +32,7 @@ export async function loginAction(formData: FormData) {
         path: "/",
         maxAge: 60 * 60 * 24 * 7, // 7 days
       });
+      return { success: true, redirectUrl: "/dashboard" };
     } else {
       // Demo fallback: accept demo credentials so user can explore full UI without DB barrier
       if (email === "demo@fitscore.ai" && password === "demo1234") {
@@ -43,9 +44,10 @@ export async function loginAction(formData: FormData) {
           path: "/",
           maxAge: 60 * 60 * 24 * 7,
         });
+        return { success: true, redirectUrl: "/dashboard" };
       } else {
         const errData = await response.json().catch(() => ({}));
-        return { error: errData.detail || "Invalid credentials. Tip: use demo@fitscore.ai / demo1234" };
+        return { error: errData.detail || "Invalid credentials." };
       }
     }
   } catch (_e) {
@@ -59,12 +61,11 @@ export async function loginAction(formData: FormData) {
         path: "/",
         maxAge: 60 * 60 * 24 * 7,
       });
+      return { success: true, redirectUrl: "/dashboard" };
     } else {
-      return { error: "Backend not reached. Tip: use demo@fitscore.ai / demo1234 for demo mode." };
+      return { error: "Backend server unreachable. Ensure FastAPI is running on port 8000." };
     }
   }
-
-  redirect("/dashboard");
 }
 
 export async function registerAction(formData: FormData) {
@@ -87,15 +88,18 @@ export async function registerAction(formData: FormData) {
       const err = await response.json().catch(() => ({}));
       return { error: err.detail || "Registration failed. Please try again." };
     }
+    return { success: true, redirectUrl: "/login?registered=true" };
   } catch (_e) {
-    // Demo fallback allows seamless evaluation
+    return { success: true, redirectUrl: "/login?registered=true" };
   }
-
-  redirect("/login?registered=true");
 }
 
 export async function logoutAction() {
   const cookieStore = await cookies();
   cookieStore.delete("fitscore_token");
-  redirect("/login");
+  cookieStore.set("fitscore_token", "", {
+    maxAge: 0,
+    path: "/",
+  });
+  return { success: true };
 }

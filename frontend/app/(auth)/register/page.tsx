@@ -2,10 +2,12 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Activity, Lock, Mail, User, ArrowRight } from "lucide-react";
 import { registerAction } from "@/app/actions/auth";
 
 export default function RegisterPage() {
+  const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -20,11 +22,13 @@ export default function RegisterPage() {
     if (result?.error) {
       setError(result.error);
       setLoading(false);
+    } else if (result?.redirectUrl) {
+      router.push(result.redirectUrl);
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#0B0E14] flex items-center justify-center p-4 relative overflow-hidden">
+    <div className="min-h-screen bg-[#04070D] flex items-center justify-center p-4 relative overflow-hidden">
       <div className="absolute top-1/4 right-1/4 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute bottom-1/4 left-1/4 w-96 h-96 bg-indigo-600/10 rounded-full blur-3xl pointer-events-none" />
 
@@ -41,7 +45,8 @@ export default function RegisterPage() {
           </p>
         </div>
 
-        <div className="bg-[#141923]/80 backdrop-blur-xl border border-[#232D42] rounded-2xl p-8 shadow-2xl shadow-black/50">
+        <div className="bg-[#0D121F] border border-white/[0.08] rounded-3xl p-8 shadow-2xl shadow-black/50 relative overflow-hidden">
+          <div className="absolute inset-x-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-white/10 to-transparent pointer-events-none" />
           <h2 className="text-lg font-bold text-white mb-6">Create Account</h2>
 
           {error && (
@@ -55,14 +60,15 @@ export default function RegisterPage() {
               <label className="block text-xs font-semibold text-slate-300 mb-1.5">
                 Full Name
               </label>
-              <div className="relative">
-                <User className="w-4 h-4 text-slate-500 absolute left-3.5 top-3.5" />
+              <div className="relative flex items-center">
+                <User className="w-4 h-4 text-slate-500 absolute left-3.5 pointer-events-none" />
                 <input
                   type="text"
                   name="fullName"
                   required
                   placeholder="Alex Rivers"
-                  className="w-full bg-[#0B0E14] border border-[#232D42] focus:border-cyan-500 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-cyan-500/30 transition-all"
+                  style={{ paddingLeft: "2.75rem", paddingRight: "1rem", paddingTop: "0.75rem", paddingBottom: "0.75rem" }}
+                  className="w-full bg-[#070B14] border border-white/[0.08] focus:border-cyan-500 rounded-xl text-sm text-white placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-cyan-500/30 transition-all"
                 />
               </div>
             </div>
@@ -71,14 +77,15 @@ export default function RegisterPage() {
               <label className="block text-xs font-semibold text-slate-300 mb-1.5">
                 Email Address
               </label>
-              <div className="relative">
-                <Mail className="w-4 h-4 text-slate-500 absolute left-3.5 top-3.5" />
+              <div className="relative flex items-center">
+                <Mail className="w-4 h-4 text-slate-500 absolute left-3.5 pointer-events-none" />
                 <input
                   type="email"
                   name="email"
                   required
                   placeholder="alex@example.com"
-                  className="w-full bg-[#0B0E14] border border-[#232D42] focus:border-cyan-500 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-cyan-500/30 transition-all"
+                  style={{ paddingLeft: "2.75rem", paddingRight: "1rem", paddingTop: "0.75rem", paddingBottom: "0.75rem" }}
+                  className="w-full bg-[#070B14] border border-white/[0.08] focus:border-cyan-500 rounded-xl text-sm text-white placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-cyan-500/30 transition-all"
                 />
               </div>
             </div>
@@ -87,14 +94,15 @@ export default function RegisterPage() {
               <label className="block text-xs font-semibold text-slate-300 mb-1.5">
                 Password
               </label>
-              <div className="relative">
-                <Lock className="w-4 h-4 text-slate-500 absolute left-3.5 top-3.5" />
+              <div className="relative flex items-center">
+                <Lock className="w-4 h-4 text-slate-500 absolute left-3.5 pointer-events-none" />
                 <input
                   type="password"
                   name="password"
                   required
                   placeholder="At least 8 characters"
-                  className="w-full bg-[#0B0E14] border border-[#232D42] focus:border-cyan-500 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-cyan-500/30 transition-all"
+                  style={{ paddingLeft: "2.75rem", paddingRight: "1rem", paddingTop: "0.75rem", paddingBottom: "0.75rem" }}
+                  className="w-full bg-[#070B14] border border-white/[0.08] focus:border-cyan-500 rounded-xl text-sm text-white placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-cyan-500/30 transition-all"
                 />
               </div>
             </div>
@@ -102,7 +110,7 @@ export default function RegisterPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full mt-2 py-3 px-4 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-semibold text-sm shadow-lg shadow-cyan-500/25 flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+              className="w-full mt-2 py-3 px-4 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-semibold text-sm shadow-lg shadow-cyan-500/25 flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50 active:scale-98"
             >
               {loading ? (
                 <span className="inline-flex items-center gap-2">
@@ -118,7 +126,7 @@ export default function RegisterPage() {
             </button>
           </form>
 
-          <div className="mt-6 pt-6 border-t border-[#232D42] text-center">
+          <div className="mt-6 pt-6 border-t border-white/[0.08] text-center">
             <p className="text-xs text-slate-400">
               Already have an account?{" "}
               <Link

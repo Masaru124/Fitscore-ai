@@ -14,12 +14,8 @@ export function middleware(request: NextRequest) {
     pathname.startsWith("/session") ||
     pathname.startsWith("/profile");
 
-  // In demo / developer evaluation mode, allow seamless access if requested
   if (isProtectedRoute && !token) {
-    // If not authenticated, redirect to login
-    // return NextResponse.redirect(new URL("/login", request.url));
-    // ponytail: allow development preview to explore seamlessly
-    return NextResponse.next();
+    return NextResponse.redirect(new URL("/login", request.url));
   }
 
   if (isAuthRoute && token) {

@@ -82,25 +82,26 @@ export default async function SessionDetailPage({
       </div>
 
       {/* Main Score Hero Card */}
-      <div className="rounded-2xl bg-gradient-to-r from-[#141923] via-[#1A2234] to-[#141923] border border-[#232D42] p-6 sm:p-8 flex flex-col md:flex-row items-center justify-between gap-8 shadow-2xl">
-        <div className="space-y-2">
+      <div className="rounded-3xl bg-[#0D121F] border border-white/[0.08] p-6 sm:p-8 flex flex-col md:flex-row items-center justify-between gap-8 shadow-2xl shadow-black/50 relative overflow-hidden">
+        <div className="absolute inset-x-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-white/10 to-transparent pointer-events-none" />
+        <div className="space-y-3">
           <div className="flex items-center gap-2">
             <Badge variant="success" size="sm">
               EVALUATION COMPLETE
             </Badge>
-            <span className="text-xs text-slate-400">{session.date}</span>
+            <span className="text-xs text-slate-400 font-mono">{session.date}</span>
           </div>
 
-          <h1 className="text-3xl font-black text-white">{session.exercise}</h1>
+          <h1 className="text-3xl font-black text-white tracking-tight">{session.exercise}</h1>
 
-          <div className="flex flex-wrap items-center gap-4 text-xs text-slate-300 pt-2">
-            <span className="flex items-center gap-1.5 bg-[#0B0E14] px-3 py-1 rounded-lg border border-[#232D42]">
+          <div className="flex flex-wrap items-center gap-3 text-xs text-slate-300 pt-1">
+            <span className="flex items-center gap-1.5 bg-[#070B14] px-3.5 py-1.5 rounded-xl border border-white/[0.08] font-mono">
               <Dumbbell className="w-3.5 h-3.5 text-cyan-400" /> {session.totalReps} Total Reps
             </span>
-            <span className="flex items-center gap-1.5 bg-[#0B0E14] px-3 py-1 rounded-lg border border-[#232D42]">
+            <span className="flex items-center gap-1.5 bg-[#070B14] px-3.5 py-1.5 rounded-xl border border-white/[0.08] font-mono">
               <Clock className="w-3.5 h-3.5 text-amber-400" /> {session.duration}
             </span>
-            <span className="flex items-center gap-1.5 bg-[#0B0E14] px-3 py-1 rounded-lg border border-[#232D42]">
+            <span className="flex items-center gap-1.5 bg-[#070B14] px-3.5 py-1.5 rounded-xl border border-white/[0.08] font-mono">
               <Flame className="w-3.5 h-3.5 text-red-400" /> {session.caloriesBurned} kcal
             </span>
           </div>
@@ -108,7 +109,7 @@ export default async function SessionDetailPage({
 
         <div className="flex flex-col items-center">
           <ScoreGauge score={session.overallScore} size={150} strokeWidth={12} label="FitScore" />
-          <span className="text-xs text-emerald-400 font-semibold mt-2">
+          <span className="text-xs text-emerald-400 font-semibold font-mono mt-2">
             Tier 1: Excellent Biomechanics
           </span>
         </div>

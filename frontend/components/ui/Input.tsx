@@ -1,36 +1,46 @@
 import React, { forwardRef } from "react";
 
-// ponytail: Native input wrapper with label, error text, and sleek dark styling
+// Tactical hardware-style input wrapper with label, error states, and glowing focus ring
 interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label?: string;
   error?: string;
   helperText?: string;
+  icon?: React.ReactNode;
 }
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(
-  ({ label, error, helperText, className = "", id, ...props }, ref) => {
+  ({ label, error, helperText, icon, className = "", id, ...props }, ref) => {
     const inputId = id || (label ? label.toLowerCase().replace(/\s+/g, "-") : undefined);
 
     return (
       <div className="w-full flex flex-col gap-1.5">
         {label && (
-          <label htmlFor={inputId} className="text-xs font-semibold text-slate-300">
-            {label}
+          <label htmlFor={inputId} className="text-xs font-semibold text-slate-300 flex items-center justify-between">
+            <span>{label}</span>
           </label>
         )}
-        <input
-          ref={ref}
-          id={inputId}
-          className={`w-full rounded-lg bg-[#0B0E14] border px-3.5 py-2.5 text-sm text-slate-100 placeholder:text-slate-500 transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-500/50 ${
-            error
-              ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
-              : "border-[#232D42] focus:border-cyan-500"
-          } ${className}`}
-          {...props}
-        />
-        {error && <span className="text-xs text-red-400 font-medium">{error}</span>}
+        <div className="relative flex items-center">
+          {icon && (
+            <div className="absolute left-3.5 text-slate-500 pointer-events-none flex items-center justify-center">
+              {icon}
+            </div>
+          )}
+          <input
+            ref={ref}
+            id={inputId}
+            className={`w-full rounded-xl bg-[#090D15] border text-sm text-slate-100 placeholder:text-slate-600 transition-all duration-200 focus:outline-none focus:ring-2 ${
+              icon ? "pl-11 pr-4" : "px-4"
+            } py-3 ${
+              error
+                ? "border-red-500/50 focus:border-red-500 focus:ring-red-500/20"
+                : "border-white/[0.08] focus:border-cyan-500 focus:ring-cyan-500/25 focus:shadow-lg focus:shadow-cyan-500/10"
+            } ${className}`}
+            {...props}
+          />
+        </div>
+        {error && <span className="text-[11px] text-red-400 font-medium">{error}</span>}
         {helperText && !error && (
-          <span className="text-xs text-slate-500">{helperText}</span>
+          <span className="text-[11px] text-slate-500">{helperText}</span>
         )}
       </div>
     );

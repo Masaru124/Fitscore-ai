@@ -1,17 +1,22 @@
+import bcrypt
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Union, Any
 from jose import jwt
-from passlib.context import CryptContext
 from app.core.config import settings
 
-# ponytail: Standard bcrypt hashing and JWT encoding/decoding
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
+# ponytail: Robust native bcrypt hashing for Python 3.13+ with zero passlib version bugs
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+    try:
+        pw_bytes = plain_password[:72].encode("utf-8")
+        h_bytes = hashed_password.encode("utf-8")
+        return bcrypt.checkpw(pw_bytes, h_bytes)
+    except Exception:
+        return False
 
 def get_password_hash(password: str) -> str:
-    return pwd_context.hash(password)
+    pw_bytes = password[:72].encode("utf-8")
+    salt = bcrypt.gensalt()
+    return bcrypt.hashpw(pw_bytes, salt).decode("utf-8")
 
 def create_access_token(subject: Union[str, Any], expires_delta: Optional[timedelta] = None) -> str:
     if expires_delta:

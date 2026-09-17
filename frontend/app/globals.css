@@ -1,77 +1,126 @@
-/* FitScore AI - Global Design System & Tokens */
-/* ponytail: Native CSS custom properties with zero runtime overhead */
-
+/* FitScore AI - Elite Agency-Tier Design System & Biomechanics Tokens */
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700;800;900&family=Geist+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 
 :root {
-  --bg-primary: #0B0E14;
-  --bg-surface: #141923;
-  --bg-card: #1A2234;
-  --bg-card-hover: #222B42;
-  --bg-glass: rgba(20, 25, 35, 0.75);
+  --bg-pitch: #04070D;
+  --bg-canvas: #070B14;
+  --bg-surface: #0B101D;
+  --bg-card: #0E1526;
+  --bg-card-elevated: #131B30;
+  --bg-glass: rgba(11, 16, 29, 0.82);
 
-  --border-subtle: #232D42;
-  --border-highlight: #3B4B6E;
+  --border-hairline: rgba(255, 255, 255, 0.08);
+  --border-subtle: rgba(255, 255, 255, 0.14);
+  --border-highlight: rgba(255, 255, 255, 0.22);
+  --border-glow-cyan: rgba(0, 240, 255, 0.4);
 
-  --text-primary: #F0F4FC;
+  --text-primary: #F8FAFC;
   --text-secondary: #94A3B8;
   --text-muted: #64748B;
 
-  --accent-neon: #00F2FE;
-  --accent-cyan: #06B6D4;
-  --accent-blue: #3B82F6;
-  --accent-violet: #8B5CF6;
-  --accent-green: #10B981;
+  --accent-cyan: #00F0FF;
+  --accent-cyan-deep: #0284C7;
+  --accent-blue: #2563EB;
+  --accent-indigo: #4F46E5;
+  --accent-emerald: #10B981;
   --accent-amber: #F59E0B;
-  --accent-red: #EF4444;
+  --accent-red: #F43F5E;
 
-  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-sans: 'Geist', 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: 'Geist Mono', 'JetBrains Mono', monospace;
+
+  --ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 * {
   box-sizing: border-box;
-  margin: 0;
-  padding: 0;
 }
 
 body {
-  background-color: var(--bg-primary);
+  background-color: var(--bg-pitch);
   color: var(--text-primary);
   font-family: var(--font-sans);
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+  letter-spacing: -0.01em;
+}
+
+/* Ambient radial glow background */
+.ambient-glow-cyan {
+  background: radial-gradient(circle at 50% 0%, rgba(0, 242, 254, 0.12) 0%, rgba(6, 182, 212, 0.03) 45%, transparent 70%);
+}
+
+.ambient-glow-subtle {
+  background: radial-gradient(circle at 80% 20%, rgba(99, 102, 241, 0.08) 0%, transparent 60%);
+}
+
+/* Double-Bezel (Doppelrand) Architecture */
+.double-bezel {
+  padding: 3px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.02) 100%);
+  border-radius: 1.25rem;
+  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.6);
+  transition: all 300ms var(--ease-spring);
+}
+
+.double-bezel:hover {
+  background: linear-gradient(135deg, rgba(0, 242, 254, 0.3) 0%, rgba(59, 130, 246, 0.1) 100%);
+  box-shadow: 0 15px 35px -10px rgba(0, 242, 254, 0.15);
+}
+
+.double-bezel-inner {
+  background-color: var(--bg-surface);
+  border-radius: calc(1.25rem - 3px);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 /* Glassmorphism utility */
 .glass-panel {
   background: var(--bg-glass);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid var(--border-subtle);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--border-hairline);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+/* Tactical grid overlay */
+.tactical-grid {
+  background-size: 32px 32px;
+  background-image: 
+    linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+}
+
+/* Scanline effect for live camera HUD */
+.scanline {
+  background: linear-gradient(to bottom, transparent 50%, rgba(0, 242, 254, 0.03) 51%);
+  background-size: 100% 4px;
 }
 
 /* Glow effects */
 .glow-cyan {
-  box-shadow: 0 0 20px rgba(0, 242, 254, 0.35);
+  box-shadow: 0 0 25px rgba(0, 242, 254, 0.35);
+}
+
+.glow-emerald {
+  box-shadow: 0 0 25px rgba(16, 185, 129, 0.35);
 }
 
 .glow-red {
-  box-shadow: 0 0 25px rgba(239, 68, 68, 0.45);
-}
-
-.glow-green {
-  box-shadow: 0 0 20px rgba(16, 185, 129, 0.35);
+  box-shadow: 0 0 25px rgba(239, 68, 68, 0.35);
 }
 
 /* Custom scrollbar */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--bg-primary);
+  background: var(--bg-pitch);
 }
 
 ::-webkit-scrollbar-thumb {
@@ -83,12 +132,15 @@ body {
   background: var(--border-highlight);
 }
 
-/* Keyframe animations */
-@keyframes pulse-subtle {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.85; transform: scale(1.02); }
+/* Kinetic spring animation helper */
+.spring-hover {
+  transition: transform 250ms var(--ease-spring), box-shadow 250ms var(--ease-spring), border-color 250ms var(--ease-spring);
 }
 
-.animate-pulse-subtle {
-  animation: pulse-subtle 2s infinite ease-in-out;
+.spring-hover:hover {
+  transform: translateY(-2px);
+}
+
+.spring-hover:active {
+  transform: translateY(0) scale(0.99);
 }
