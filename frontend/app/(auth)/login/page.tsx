@@ -31,8 +31,8 @@ export default function LoginPage() {
   };
 
   const handleDemoFill = () => {
-    setEmail("athlete@fitscore.ai");
-    setPassword("FitScore2026!");
+    setEmail("demo@example.com");
+    setPassword("demo1234");
   };
 
   return (
@@ -88,7 +88,7 @@ export default function LoginPage() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="athlete@fitscore.ai"
+                  placeholder="athlete@example.com"
                   style={{ paddingLeft: "2.75rem", paddingRight: "1rem", paddingTop: "0.75rem", paddingBottom: "0.75rem" }}
                   className="w-full bg-[#070B14] border border-white/[0.08] focus:border-cyan-500 rounded-xl text-sm text-white placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-cyan-500/30 transition-all"
                 />

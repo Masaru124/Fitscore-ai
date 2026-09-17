@@ -35,7 +35,7 @@ export async function loginAction(formData: FormData) {
       return { success: true, redirectUrl: "/dashboard" };
     } else {
       // Demo fallback: accept demo credentials so user can explore full UI without DB barrier
-      if (email === "demo@fitscore.ai" && password === "demo1234") {
+      if ((email === "demo@example.com" || email === "demo@fitscore.ai") && password === "demo1234") {
         const cookieStore = await cookies();
         cookieStore.set("fitscore_token", "demo_jwt_token_fitscore_ai", {
           httpOnly: true,
@@ -52,7 +52,7 @@ export async function loginAction(formData: FormData) {
     }
   } catch (_e) {
     // Network fallback for standalone local mode
-    if (email === "demo@fitscore.ai" && password === "demo1234") {
+    if ((email === "demo@example.com" || email === "demo@fitscore.ai") && password === "demo1234") {
       const cookieStore = await cookies();
       cookieStore.set("fitscore_token", "demo_jwt_token_fitscore_ai", {
         httpOnly: true,

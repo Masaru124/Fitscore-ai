@@ -15,8 +15,8 @@ async function testExerciseKinematics() {
 
   // Login first to set session cookie
   await page.goto(`${BASE_URL}/login`);
-  await page.fill('input[name="email"]', 'athlete@fitscore.ai');
-  await page.fill('input[name="password"]', 'FitScore2026!');
+  await page.fill('input[name="email"]', 'demo@example.com');
+  await page.fill('input[name="password"]', 'demo1234');
   await page.click('button[type="submit"]');
   await page.waitForURL(url => url.pathname.includes('/dashboard'), { timeout: 10000 });
 
