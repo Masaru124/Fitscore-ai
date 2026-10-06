@@ -82,7 +82,7 @@ export const TrendChart: React.FC<TrendChartProps> = ({ data = defaultData }) =>
           {[60, 80, 100].map((level) => {
             const y = getY(level);
             return (
-              <g key={level}>
+              <g key={`grid-lvl-${level}`}>
                 <line
                   x1={paddingX}
                   y1={y}
@@ -126,7 +126,7 @@ export const TrendChart: React.FC<TrendChartProps> = ({ data = defaultData }) =>
 
             return (
               <g
-                key={i}
+                key={`trend-pt-${d.date || i}-${i}`}
                 className="cursor-pointer"
                 onMouseEnter={() => setHoveredIdx(i)}
                 onMouseLeave={() => setHoveredIdx(null)}

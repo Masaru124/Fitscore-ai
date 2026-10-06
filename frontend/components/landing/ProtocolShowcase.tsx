@@ -61,7 +61,7 @@ export function ProtocolShowcase() {
       {/* Protocol Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {filtered.map((p, idx) => (
-          <Card key={idx} hoverEffect className="p-4 space-y-3">
+          <Card key={`proto-${p.name}-${idx}`} hoverEffect className="p-4 space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-mono uppercase tracking-wider text-cyan-400 font-bold">
                 {p.category}

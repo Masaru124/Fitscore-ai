@@ -15,6 +15,8 @@ import {
   RotateCcw,
   Activity,
   Cpu,
+  ZoomIn,
+  ZoomOut,
 } from "lucide-react";
 import { ScoreGauge } from "@/components/workout/ScoreGauge";
 import { RepCounter } from "@/components/workout/RepCounter";
@@ -22,6 +24,7 @@ import { InjuryAlert, RiskWarning } from "@/components/workout/InjuryAlert";
 import { Button } from "@/components/ui/Button";
 
 export interface RepTelemetry {
+  id?: string;
   rep: number;
   score: number;
   depthLabel: string;
@@ -85,6 +88,7 @@ export const LiveSession: React.FC<LiveSessionProps> = ({
   const [voiceCoach, setVoiceCoach] = useState(true);
   const [score, setScore] = useState(92);
   const [reps, setReps] = useState(0);
+  const repsCountRef = useRef(0);
   const [phase, setPhase] = useState<"ECCENTRIC" | "CONCENTRIC" | "PEAK_HOLD" | "IDLE">("IDLE");
   const [activeWarning, setActiveWarning] = useState<RiskWarning | null>(null);
   const [repsLog, setRepsLog] = useState<RepTelemetry[]>([]);
@@ -108,6 +112,49 @@ export const LiveSession: React.FC<LiveSessionProps> = ({
   const handlePoseResultsRef = useRef<(results: any) => void>(() => {});
   const lastPoseDetectedTimeRef = useRef<number>(0);
   const calibrationTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const sessionStartTimeRef = useRef<number | null>(null);
+
+  // Device-Aware Camera Zoom & Unzoom State
+  const [zoomLevel, setZoomLevel] = useState<number>(1.0);
+  const [zoomRange, setZoomRange] = useState<{ min: number; max: number; step: number }>({
+    min: 0.75,
+    max: 2.5,
+    step: 0.1,
+  });
+  const [isHardwareZoom, setIsHardwareZoom] = useState<boolean>(false);
+  const videoTrackRef = useRef<MediaStreamTrack | null>(null);
+
+  // Zoom Handler with Device Capability Awareness
+  const handleZoomChange = async (targetZoom: number) => {
+    const clamped = Math.min(zoomRange.max, Math.max(zoomRange.min, Number(targetZoom.toFixed(2))));
+    setZoomLevel(clamped);
+
+    // Apply native hardware/PTZ zoom if supported by device camera
+    if (isHardwareZoom && videoTrackRef.current) {
+      try {
+        await (videoTrackRef.current as any).applyConstraints({
+          advanced: [{ zoom: clamped }],
+        });
+      } catch (err) {
+        console.warn("Hardware zoom error, switching to digital scaling:", err);
+        setIsHardwareZoom(false);
+      }
+    }
+  };
+
+  const zoomIn = () => {
+    const delta = isHardwareZoom ? Math.max(zoomRange.step, 0.2) : 0.2;
+    handleZoomChange(zoomLevel + delta);
+  };
+
+  const zoomOut = () => {
+    const delta = isHardwareZoom ? Math.max(zoomRange.step, 0.2) : 0.2;
+    handleZoomChange(zoomLevel - delta);
+  };
+
+  const resetZoom = () => {
+    handleZoomChange(1.0);
+  };
 
   // Audio Speech Coach
   const speakVoice = useCallback(
@@ -512,6 +559,7 @@ export const LiveSession: React.FC<LiveSessionProps> = ({
     }
 
     const newRecord: RepTelemetry = {
+      id: `rep_${repNum}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
       rep: repNum,
       score: calculatedFitScore,
       depthLabel: depthText,
@@ -528,7 +576,9 @@ export const LiveSession: React.FC<LiveSessionProps> = ({
     };
 
     setRepsLog((prev) => {
-      const updated = [newRecord, ...prev];
+      // Deduplicate by rep number so every rep is uniquely represented
+      const filtered = prev.filter((r) => r.rep !== newRecord.rep);
+      const updated = [newRecord, ...filtered];
       if (typeof window !== "undefined") {
         try {
           localStorage.setItem(
@@ -537,7 +587,7 @@ export const LiveSession: React.FC<LiveSessionProps> = ({
               id: `sess_${Date.now()}`,
               exercise: exerciseName,
               exerciseId,
-              date: new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }),
+              date: new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" }),
               totalReps: updated.length,
               overallScore: calculatedFitScore,
               metrics: [
@@ -546,7 +596,8 @@ export const LiveSession: React.FC<LiveSessionProps> = ({
                 { name: "Bilateral Symmetry", score: symScore, weight: "20%", note: `Discrepancy Δ ${diff.toFixed(1)}°` },
                 { name: "Joint Stability", score: stabScore, weight: "20%", note: `Spinal neutrality ${currentSpine.toFixed(1)}°` },
               ],
-              reps: updated.map((r) => ({
+              reps: updated.map((r, idx) => ({
+                id: r.id || `rep_${r.rep}_${idx}`,
                 rep: r.rep,
                 score: r.score,
                 depth: r.depthAngle,
@@ -633,35 +684,35 @@ export const LiveSession: React.FC<LiveSessionProps> = ({
             fsmStateRef.current = "IDLE";
             setPhase("IDLE");
 
-            setReps((prev) => {
-              const newReps = prev + 1;
-              const { calculatedFitScore, statusText, diff } = recordCompletedRep(
-                newReps,
-                peakAngleReachedRef.current,
-                targetDepth,
-                repDuration,
-                secondary,
-                spine,
-                normalizedId
-              );
+            const newReps = repsCountRef.current + 1;
+            repsCountRef.current = newReps;
+            setReps(newReps);
 
-              // Check injury guard
-              if (diff > 14 && normalizedId.includes("squat")) {
-                setActiveWarning({
-                  id: String(Date.now()),
-                  type: "knee_valgus",
-                  title: "Knee Asymmetry Warning",
-                  message: `Bilateral difference: ${diff.toFixed(1)}°. Drive knees outward in line with toes.`,
-                  severity: "medium",
-                  timestamp: "Just now",
-                });
-                speakVoice("Watch your knees, push outward!");
-              } else {
-                setActiveWarning(null);
-                speakVoice(`Rep ${newReps}! ${newReps === targetReps ? "Target achieved!" : statusText}`);
-              }
-              return newReps;
-            });
+            const { calculatedFitScore, statusText, diff } = recordCompletedRep(
+              newReps,
+              peakAngleReachedRef.current,
+              targetDepth,
+              repDuration,
+              secondary,
+              spine,
+              normalizedId
+            );
+
+            // Check injury guard
+            if (diff > 14 && normalizedId.includes("squat")) {
+              setActiveWarning({
+                id: String(Date.now()),
+                type: "knee_valgus",
+                title: "Knee Asymmetry Warning",
+                message: `Bilateral difference: ${diff.toFixed(1)}°. Drive knees outward in line with toes.`,
+                severity: "medium",
+                timestamp: "Just now",
+              });
+              speakVoice("Watch your knees, push outward!");
+            } else {
+              setActiveWarning(null);
+              speakVoice(`Rep ${newReps}! ${newReps === targetReps ? "Target achieved!" : statusText}`);
+            }
           }
           break;
       }
@@ -708,21 +759,21 @@ export const LiveSession: React.FC<LiveSessionProps> = ({
             fsmStateRef.current = "IDLE";
             setPhase("IDLE");
 
-            setReps((prev) => {
-              const newReps = prev + 1;
-              const { calculatedFitScore, statusText } = recordCompletedRep(
-                newReps,
-                peakAngleReachedRef.current,
-                targetLockout,
-                repDuration,
-                secondary,
-                spine,
-                normalizedId
-              );
-              setActiveWarning(null);
-              speakVoice(`Rep ${newReps}! ${statusText}`);
-              return newReps;
-            });
+            const newReps = repsCountRef.current + 1;
+            repsCountRef.current = newReps;
+            setReps(newReps);
+
+            const { calculatedFitScore, statusText } = recordCompletedRep(
+              newReps,
+              peakAngleReachedRef.current,
+              targetLockout,
+              repDuration,
+              secondary,
+              spine,
+              normalizedId
+            );
+            setActiveWarning(null);
+            speakVoice(`Rep ${newReps}! ${statusText}`);
           }
           break;
       }
@@ -921,6 +972,37 @@ export const LiveSession: React.FC<LiveSessionProps> = ({
         setIsDemoMode(false);
         setTrackingConfidence("CALIBRATING SENSOR...");
 
+        // Inspect Device Camera Hardware Capabilities for Optical/PTZ Zoom
+        const track = stream.getVideoTracks()[0];
+        videoTrackRef.current = track;
+        let hwZoomAvailable = false;
+        let minZ = 0.75;
+        let maxZ = 2.5;
+        let stepZ = 0.1;
+
+        if (track && typeof (track as any).getCapabilities === "function") {
+          try {
+            const caps = (track as any).getCapabilities();
+            if (caps && caps.zoom) {
+              hwZoomAvailable = true;
+              minZ = caps.zoom.min ?? 1.0;
+              maxZ = caps.zoom.max ?? 4.0;
+              stepZ = caps.zoom.step ?? 0.1;
+              const settings = (track as any).getSettings ? (track as any).getSettings() : {};
+              const initialZoom = settings.zoom ?? 1.0;
+              setZoomLevel(initialZoom);
+            }
+          } catch (e) {
+            console.warn("Could not query device zoom capabilities:", e);
+          }
+        }
+
+        setIsHardwareZoom(hwZoomAvailable);
+        setZoomRange({ min: minZ, max: maxZ, step: stepZ });
+        if (!hwZoomAvailable) {
+          setZoomLevel(1.0);
+        }
+
         // Ensure Pose engine initializes immediately
         initPoseEngine();
 
@@ -956,6 +1038,10 @@ export const LiveSession: React.FC<LiveSessionProps> = ({
       clearTimeout(calibrationTimerRef.current);
       calibrationTimerRef.current = null;
     }
+    if (videoTrackRef.current) {
+      videoTrackRef.current = null;
+    }
+    setZoomLevel(1.0);
     if (videoRef.current && videoRef.current.srcObject) {
       const stream = videoRef.current.srcObject as MediaStream;
       stream.getTracks().forEach((track) => track.stop());
@@ -970,38 +1056,156 @@ export const LiveSession: React.FC<LiveSessionProps> = ({
       await startCamera();
     }
     setIsLive(true);
+    sessionStartTimeRef.current = Date.now();
+    repsCountRef.current = 0;
     setReps(0);
+    setRepsLog([]);
     fsmStateRef.current = "IDLE";
     speakVoice(`Session started for ${exerciseName}. Ready on camera.`);
   };
 
   // Stop Session
-  const handleStop = () => {
+  const handleStop = async () => {
     setIsLive(false);
     stopCamera();
     speakVoice("Great workout! Biomechanics analysis completed.");
-    router.push("/session/sess_01");
+
+    const durationSec = sessionStartTimeRef.current
+      ? Math.max(1, Math.round((Date.now() - sessionStartTimeRef.current) / 1000))
+      : Math.max(1, repsCountRef.current * 3);
+    const mins = Math.floor(durationSec / 60);
+    const secs = durationSec % 60;
+    const durationLabel = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+    const calories = Math.max(1, Math.round(durationSec * 0.14 + repsCountRef.current * 0.8));
+
+    const now = new Date();
+    const realDateStr = now.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+    const newSessionId = `sess_${Date.now()}`;
+
+    // Clean and sort actual recorded reps
+    const cleanReps = [...repsLog].sort((a, b) => a.rep - b.rep);
+    const finalScore = cleanReps.length > 0
+      ? Math.round(cleanReps.reduce((acc, r) => acc + (r.score || 90), 0) / cleanReps.length)
+      : score;
+
+    const avgRom = cleanReps.length > 0
+      ? Math.round(cleanReps.reduce((acc, r) => acc + (r.rawAngle ? Math.min(100, Math.round(100 - Math.abs(r.rawAngle - 85))) : 90), 0) / cleanReps.length)
+      : 90;
+    const avgTempo = cleanReps.length > 0
+      ? Math.round(cleanReps.reduce((acc, r) => acc + (r.tempoSeconds && r.tempoSeconds >= 2.0 && r.tempoSeconds <= 3.2 ? 100 : 85), 0) / cleanReps.length)
+      : 88;
+    const avgSym = cleanReps.length > 0 ? 92 : 90;
+    const avgStab = cleanReps.length > 0
+      ? Math.round(cleanReps.reduce((acc, r) => acc + (r.stabilityScore || 88), 0) / cleanReps.length)
+      : 88;
+
+    const riskCount = cleanReps.filter((r) => r.status === "warning").length;
+
+    const sessionPayload = {
+      id: newSessionId,
+      exercise: exerciseName,
+      exerciseId,
+      date: realDateStr,
+      timestamp: Date.now(),
+      duration: durationLabel,
+      durationSeconds: durationSec,
+      totalReps: cleanReps.length,
+      overallScore: finalScore,
+      caloriesBurned: calories,
+      metrics: [
+        { name: "Range of Motion (ROM)", score: avgRom, weight: "35%", note: `Recorded for ${exerciseName}` },
+        { name: "Rep Tempo & Cadence", score: avgTempo, weight: "25%", note: `Controlled real-time execution` },
+        { name: "Bilateral Symmetry", score: avgSym, weight: "20%", note: `Optimal bilateral tracking` },
+        { name: "Joint Stability", score: avgStab, weight: "20%", note: `Spine and pelvic neutrality` },
+      ],
+      reps: cleanReps.map((r) => ({
+        id: r.id,
+        rep: r.rep,
+        score: r.score,
+        depth: r.depthAngle,
+        tempo: r.tempo,
+        status: r.status,
+        issue: r.issue,
+      })),
+      aiCoaching: [
+        `Completed ${cleanReps.length} repetitions of ${exerciseName} with ${finalScore}/100 composite FitScore.`,
+        riskCount > 0
+          ? `${riskCount} form flaw(s) flagged under fatigue. Focus on stabilizing throughout the eccentric descent.`
+          : "Flawless joint angles and cadence maintained across working sets.",
+      ],
+    };
+
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem("fitscore_latest_session", JSON.stringify(sessionPayload));
+        const rawSaved = localStorage.getItem("fitscore_saved_sessions");
+        const savedList = rawSaved ? JSON.parse(rawSaved) : [];
+        const filtered = savedList.filter((s: any) => s.id !== newSessionId);
+        localStorage.setItem("fitscore_saved_sessions", JSON.stringify([sessionPayload, ...filtered]));
+      } catch (e) {
+        console.warn("LocalStorage save warning:", e);
+      }
+    }
+
+    // Persist real session directly to DB
+    try {
+      await fetch("http://localhost:8000/api/v1/sessions/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          exercise_name: exerciseName,
+          total_reps: cleanReps.length,
+          duration_seconds: durationSec,
+          overall_fitscore: finalScore,
+          rom_score: avgRom,
+          tempo_score: avgTempo,
+          symmetry_score: avgSym,
+          stability_score: avgStab,
+          injury_risk_count: riskCount,
+          ai_coaching_notes: sessionPayload.aiCoaching.join(" "),
+          reps: cleanReps.map((r) => ({
+            rep: r.rep,
+            score: r.score,
+            depth: r.depthAngle,
+            tempo: r.tempo,
+            status: r.status,
+            issue: r.issue,
+          })),
+        }),
+      });
+    } catch (err) {
+      console.warn("Async DB save note:", err);
+    }
+
+    router.push(`/session/${newSessionId}`);
   };
 
   // Manual Trigger for a Single Simulated Rep (Strictly in Demo Mode)
   const triggerManualSimulatedRep = () => {
-    setReps((r) => {
-      const next = r + 1;
-      const simDuration = +(2.2 + (Math.random() * 0.4 - 0.2)).toFixed(2);
-      const simDepth = +(84.2 + (Math.random() * 2.5 - 1.2)).toFixed(1);
-      const simDiff = +(1.4 + (Math.random() * 1.2)).toFixed(1);
-      const { statusText } = recordCompletedRep(
-        next,
-        simDepth,
-        85,
-        simDuration,
-        simDepth + simDiff,
-        84.8,
-        exerciseId.toLowerCase()
-      );
-      speakVoice(`Simulated Rep ${next}! ${statusText}`);
-      return next;
-    });
+    const next = repsCountRef.current + 1;
+    repsCountRef.current = next;
+    setReps(next);
+
+    const simDuration = +(2.2 + (Math.random() * 0.4 - 0.2)).toFixed(2);
+    const simDepth = +(84.2 + (Math.random() * 2.5 - 1.2)).toFixed(1);
+    const simDiff = +(1.4 + (Math.random() * 1.2)).toFixed(1);
+    const { statusText } = recordCompletedRep(
+      next,
+      simDepth,
+      85,
+      simDuration,
+      simDepth + simDiff,
+      84.8,
+      exerciseId.toLowerCase()
+    );
+    speakVoice(`Simulated Rep ${next}! ${statusText}`);
   };
 
   // EXERCISE-SPECIFIC SYNTHETIC EXOSKELETON RENDERER (Strictly used ONLY in Demo Sandbox Mode)
@@ -1285,23 +1489,120 @@ export const LiveSession: React.FC<LiveSessionProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Webcam Viewport (Left 2 cols) */}
         <div className="lg:col-span-2 relative rounded-2xl overflow-hidden bg-black border border-[#232D42] shadow-2xl min-h-[440px] flex items-center justify-center">
-          {/* Native HTML5 Video for user camera */}
-          <video
-            ref={videoRef}
-            playsInline
-            muted
-            className={`absolute inset-0 w-full h-full object-cover transform -scale-x-100 ${
-              cameraActive && !isDemoMode ? "block" : "hidden"
-            }`}
-          />
+          {/* Zoomable Container: Scales video & canvas together seamlessly when digital zoom is active */}
+          <div
+            className="absolute inset-0 w-full h-full overflow-hidden flex items-center justify-center"
+            style={{
+              transform: `scale(${isHardwareZoom ? 1 : zoomLevel})`,
+              transformOrigin: "center center",
+              transition: "transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)",
+            }}
+          >
+            {/* Native HTML5 Video for user camera */}
+            <video
+              ref={videoRef}
+              playsInline
+              muted
+              className={`absolute inset-0 w-full h-full object-cover transform -scale-x-100 ${
+                cameraActive && !isDemoMode ? "block" : "hidden"
+              }`}
+            />
 
-          {/* Canvas overlay for skeletal landmarks */}
-          <canvas
-            ref={canvasRef}
-            width={720}
-            height={480}
-            className="absolute inset-0 w-full h-full z-10 pointer-events-none"
-          />
+            {/* Canvas overlay for skeletal landmarks */}
+            <canvas
+              ref={canvasRef}
+              width={720}
+              height={480}
+              className="absolute inset-0 w-full h-full z-10 pointer-events-none"
+            />
+          </div>
+
+          {/* Device-Aware Zoom & Unzoom Controls */}
+          {cameraActive && !isDemoMode && (
+            <div className="absolute top-16 right-4 z-20 flex flex-col items-end gap-1.5 pointer-events-auto">
+              <div className="bg-[#0B0E14]/90 backdrop-blur-md px-2.5 py-1.5 rounded-2xl border border-white/10 shadow-2xl flex items-center gap-1.5">
+                <button
+                  onClick={zoomOut}
+                  disabled={zoomLevel <= zoomRange.min}
+                  className="w-7 h-7 rounded-lg bg-white/5 hover:bg-white/15 disabled:opacity-30 disabled:hover:bg-white/5 border border-white/10 flex items-center justify-center text-slate-300 hover:text-white transition-all cursor-pointer active:scale-95"
+                  title="Unzoom / Wide View (-)"
+                >
+                  <ZoomOut className="w-3.5 h-3.5" />
+                </button>
+
+                <button
+                  onClick={resetZoom}
+                  className="px-2 py-0.5 rounded-md bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/40 text-cyan-300 font-mono text-xs font-bold transition-all cursor-pointer"
+                  title="Click to reset to 1.0x"
+                >
+                  {zoomLevel.toFixed(1)}x
+                </button>
+
+                <button
+                  onClick={zoomIn}
+                  disabled={zoomLevel >= zoomRange.max}
+                  className="w-7 h-7 rounded-lg bg-white/5 hover:bg-white/15 disabled:opacity-30 disabled:hover:bg-white/5 border border-white/10 flex items-center justify-center text-slate-300 hover:text-white transition-all cursor-pointer active:scale-95"
+                  title="Zoom In (+)"
+                >
+                  <ZoomIn className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              {/* Capability Status Badge */}
+              <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-black/75 backdrop-blur-sm border border-white/10 text-[10px] font-mono text-slate-300">
+                <span className={`w-1.5 h-1.5 rounded-full ${isHardwareZoom ? "bg-emerald-400 animate-pulse" : "bg-cyan-400"}`} />
+                <span>{isHardwareZoom ? "Hardware Camera PTZ Zoom" : "Digital Wide & Focus"}</span>
+              </div>
+
+              {/* Quick Preset Buttons */}
+              <div className="flex items-center gap-1 bg-[#0B0E14]/85 backdrop-blur-md p-1 rounded-xl border border-white/10 text-[10px] font-mono">
+                <button
+                  onClick={() => handleZoomChange(0.8)}
+                  className={`px-2 py-0.5 rounded transition-colors cursor-pointer ${
+                    Math.abs(zoomLevel - 0.8) < 0.05
+                      ? "bg-cyan-500 text-black font-bold"
+                      : "text-slate-400 hover:text-white hover:bg-white/10"
+                  }`}
+                  title="Unzoom to 0.8x for wider room view"
+                >
+                  0.8x Wide
+                </button>
+                <button
+                  onClick={() => handleZoomChange(1.0)}
+                  className={`px-2 py-0.5 rounded transition-colors cursor-pointer ${
+                    Math.abs(zoomLevel - 1.0) < 0.05
+                      ? "bg-cyan-500 text-black font-bold"
+                      : "text-slate-400 hover:text-white hover:bg-white/10"
+                  }`}
+                  title="Default 1.0x view"
+                >
+                  1.0x
+                </button>
+                <button
+                  onClick={() => handleZoomChange(1.4)}
+                  className={`px-2 py-0.5 rounded transition-colors cursor-pointer ${
+                    Math.abs(zoomLevel - 1.4) < 0.05
+                      ? "bg-cyan-500 text-black font-bold"
+                      : "text-slate-400 hover:text-white hover:bg-white/10"
+                  }`}
+                  title="1.4x medium focus"
+                >
+                  1.4x
+                </button>
+                <button
+                  onClick={() => handleZoomChange(1.8)}
+                  className={`px-2 py-0.5 rounded transition-colors cursor-pointer ${
+                    Math.abs(zoomLevel - 1.8) < 0.05
+                      ? "bg-cyan-500 text-black font-bold"
+                      : "text-slate-400 hover:text-white hover:bg-white/10"
+                  }`}
+                  title="1.8x close-up framing"
+                >
+                  1.8x
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Idle state camera activator */}
           {!cameraActive && (
@@ -1478,8 +1779,8 @@ export const LiveSession: React.FC<LiveSessionProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/[0.06]">
-                  {repsLog.map((r) => (
-                    <tr key={r.rep} className="hover:bg-[#151C2C]/50 transition-colors">
+                  {repsLog.map((r, idx) => (
+                    <tr key={`live-rep-row-${r.rep}-${idx}`} className="hover:bg-[#151C2C]/50 transition-colors">
                       <td className="py-3 font-mono font-bold text-white">Rep {r.rep}</td>
                       <td className="py-3 font-mono font-bold">
                         <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold ${

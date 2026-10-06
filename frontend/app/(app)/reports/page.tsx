@@ -29,39 +29,38 @@ interface ReportItem {
   riskSummary: string;
 }
 
-const pastReports: ReportItem[] = [
-  {
-    id: "rep_w38",
-    title: "Weekly Biomechanics Audit — Week 38 (Current)",
-    period: "Sep 16 – Present",
-    generatedDate: "Sep 17, 2026",
-    avgScore: 90.2,
-    totalVolume: 82,
-    riskSummary: "Zero critical form flaws detected across 82 completed reps.",
-  },
-  {
-    id: "rep_w37",
-    title: "Weekly Biomechanics Audit — Week 37",
-    period: "Sep 09 – Sep 15, 2026",
-    generatedDate: "Sep 15, 2026",
-    avgScore: 88.5,
-    totalVolume: 153,
-    riskSummary: "1 low-severity knee valgus incidence. 0 spine compromises.",
-  },
-  {
-    id: "rep_m08",
-    title: "Monthly Kinematic Intelligence — August 2026",
-    period: "Aug 01 – Aug 31, 2026",
-    generatedDate: "Sep 01, 2026",
-    avgScore: 84.1,
-    totalVolume: 610,
-    riskSummary: "Form consistency improved by +6.8% across squat and deadlift.",
-  },
-];
+const getInitialReports = (): ReportItem[] => {
+  const now = new Date();
+  const d1 = new Date(now.getTime() - 2 * 86400000);
+  const d2 = new Date(now.getTime() - 7 * 86400000);
+  const d3 = new Date(now.getTime() - 14 * 86400000);
+  const fmt = (d: Date) => d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+
+  return [
+    {
+      id: "rep_w01",
+      title: "Current Biomechanics Audit — Recent Cycle",
+      period: `${fmt(d2)} – Present`,
+      generatedDate: fmt(d1),
+      avgScore: 90.2,
+      totalVolume: 82,
+      riskSummary: "Zero critical form flaws detected across verified working sets.",
+    },
+    {
+      id: "rep_w02",
+      title: "Weekly Biomechanics Audit — Prior Cycle",
+      period: `${fmt(d3)} – ${fmt(d2)}`,
+      generatedDate: fmt(d2),
+      avgScore: 88.5,
+      totalVolume: 153,
+      riskSummary: "Optimal joint kinematics observed with balanced cadence.",
+    },
+  ];
+};
 
 export default function ReportsPage() {
   const [generating, setGenerating] = useState(false);
-  const [reportList, setReportList] = useState<ReportItem[]>(pastReports);
+  const [reportList, setReportList] = useState<ReportItem[]>(getInitialReports);
 
   const handleGenerate = () => {
     setGenerating(true);

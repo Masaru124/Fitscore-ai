@@ -1,6 +1,7 @@
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from datetime import datetime
+from app.schemas.metric import RepMetricResponse
 
 # ponytail: Schemas for WorkoutSession request/response
 class WorkoutSessionBase(BaseModel):
@@ -16,12 +17,13 @@ class WorkoutSessionBase(BaseModel):
     ai_coaching_notes: Optional[str] = None
 
 class WorkoutSessionCreate(WorkoutSessionBase):
-    pass
+    reps: Optional[List[Dict[str, Any]]] = None
 
 class WorkoutSessionResponse(WorkoutSessionBase):
     id: int
     user_id: int
     created_at: datetime
+    metrics: Optional[List[RepMetricResponse]] = None
 
     class Config:
         from_attributes = True
