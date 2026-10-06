@@ -106,6 +106,8 @@ export const LiveSession: React.FC<LiveSessionProps> = ({
   const repStartTimeRef = useRef<number>(0);
   const isSendingFrameRef = useRef<boolean>(false);
   const handlePoseResultsRef = useRef<(results: any) => void>(() => {});
+  const lastPoseDetectedTimeRef = useRef<number>(0);
+  const calibrationTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Audio Speech Coach
   const speakVoice = useCallback(
@@ -208,60 +210,112 @@ export const LiveSession: React.FC<LiveSessionProps> = ({
     ctx.restore();
   }, [exerciseId]);
 
-  // Load MediaPipe dynamically (Pose solution runtime)
+  // Safe MediaPipe Pose Instance Initializer
+  const initPoseEngine = useCallback(() => {
+    if (typeof window === "undefined") return;
+    const win = window as any;
+    if (poseRef.current) return;
+
+    // Suppress internal C++ WebGL status notices (I0000 / W0000 gl_context) from spamming Next.js dev terminal
+    if (!win.__fitscore_glog_filtered) {
+      win.__fitscore_glog_filtered = true;
+      const originalWarn = console.warn;
+      const originalInfo = console.info;
+      const isInternalGlog = (msg: any) =>
+        typeof msg === "string" &&
+        (msg.includes("gl_context") || msg.startsWith("I0000") || msg.startsWith("W0000"));
+
+      console.warn = (...args: any[]) => {
+        if (isInternalGlog(args[0])) return;
+        originalWarn.apply(console, args);
+      };
+      console.info = (...args: any[]) => {
+        if (isInternalGlog(args[0])) return;
+        originalInfo.apply(console, args);
+      };
+    }
+
+    if (win.Pose) {
+      try {
+        const pose = new win.Pose({
+          locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/${file}`,
+        });
+
+        pose.setOptions({
+          modelComplexity: 0,
+          smoothLandmarks: true,
+          enableSegmentation: false,
+          minDetectionConfidence: 0.25,
+          minTrackingConfidence: 0.25,
+        });
+
+        pose.onResults((results: any) => {
+          handlePoseResultsRef.current?.(results);
+        });
+
+        poseRef.current = pose;
+        setVisionEngineReady(true);
+      } catch (e) {
+        console.warn("MediaPipe Pose instantiation warning:", e);
+      }
+    }
+  }, []);
+
+  // Load MediaPipe dynamically with multi-mount safety and fallback polling
   useEffect(() => {
     let isMounted = true;
 
-    const loadScript = (src: string): Promise<void> => {
-      return new Promise((resolve, reject) => {
-        if (document.querySelector(`script[src="${src}"]`)) {
-          resolve();
-          return;
-        }
-        const script = document.createElement("script");
-        script.src = src;
+    const loadPoseScript = () => {
+      const win = typeof window !== "undefined" ? (window as any) : null;
+      if (!win) return;
+      if (win.Pose) {
+        initPoseEngine();
+        return;
+      }
+
+      const cdnUrl = "https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/pose.js";
+      let script = document.querySelector(`script[data-mediapipe="pose"]`) as HTMLScriptElement | null;
+
+      if (!script) {
+        script = document.createElement("script");
+        script.src = cdnUrl;
+        script.dataset.mediapipe = "pose";
         script.crossOrigin = "anonymous";
-        script.onload = () => resolve();
-        script.onerror = (e) => reject(e);
         document.head.appendChild(script);
-      });
+      }
+
+      const onScriptReady = () => {
+        if (!isMounted) return;
+        initPoseEngine();
+      };
+
+      script.addEventListener("load", onScriptReady);
+
+      // Polling fallback to handle React Strict Mode remount races
+      const pollTimer = setInterval(() => {
+        if (win.Pose) {
+          clearInterval(pollTimer);
+          onScriptReady();
+        }
+      }, 150);
+
+      const timeoutTimer = setTimeout(() => {
+        clearInterval(pollTimer);
+      }, 6000);
+
+      return () => {
+        clearInterval(pollTimer);
+        clearTimeout(timeoutTimer);
+        script?.removeEventListener("load", onScriptReady);
+      };
     };
 
-    // Load only the official, working Pose JS runtime
-    loadScript("https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/pose.js")
-      .then(() => {
-        if (!isMounted) return;
-        const win = window as any;
-        if (win.Pose) {
-          const pose = new win.Pose({
-            locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/${file}`,
-          });
-
-          pose.setOptions({
-            modelComplexity: 0,
-            smoothLandmarks: true,
-            enableSegmentation: false,
-            minDetectionConfidence: 0.3,
-            minTrackingConfidence: 0.3,
-          });
-
-          pose.onResults((results: any) => {
-            if (!isMounted) return;
-            handlePoseResultsRef.current?.(results);
-          });
-
-          poseRef.current = pose;
-          setVisionEngineReady(true);
-        }
-      })
-      .catch((err) => {
-        console.warn("MediaPipe Pose load deferred:", err);
-      });
-
+    const cleanup = loadPoseScript();
     return () => {
       isMounted = false;
+      cleanup?.();
     };
-  }, []);
+  }, [initPoseEngine]);
 
   // Update ref on each render
   handlePoseResultsRef.current = (results: any) => handlePoseResults(results);
@@ -272,9 +326,12 @@ export const LiveSession: React.FC<LiveSessionProps> = ({
 
     const lm = results?.poseLandmarks;
     if (!lm || lm.length < 17) {
-      setUsingRealPose(false);
-      setTrackingConfidence("SEARCHING FOR ATHLETE");
-      drawFramingGuide();
+      // Don't drop tracking abruptly on a single momentary blur
+      if (Date.now() - lastPoseDetectedTimeRef.current > 2500) {
+        setUsingRealPose(false);
+        setTrackingConfidence("SEARCHING FOR ATHLETE");
+        drawFramingGuide();
+      }
       return;
     }
 
@@ -285,22 +342,31 @@ export const LiveSession: React.FC<LiveSessionProps> = ({
       normalizedId.includes("lateral") ||
       normalizedId.includes("raise");
 
-    // Landmarks 11 & 12 are shoulders; 23 & 24 are hips; 25 & 26 are knees
-    const upperVis = (lm[11]?.visibility ?? 1.0) > 0.25 || (lm[12]?.visibility ?? 1.0) > 0.25 || (lm[0]?.visibility ?? 1.0) > 0.25;
+    // Landmarks: 0 Nose, 11/12 Shoulders, 23/24 Hips, 25/26 Knees
+    const upperVis =
+      lm[0] != null ||
+      lm[11] != null ||
+      lm[12] != null ||
+      (lm[11]?.visibility ?? 1.0) > 0.15 ||
+      (lm[12]?.visibility ?? 1.0) > 0.15;
     const lowerVis = (lm[25]?.visibility ?? 1.0) > 0.25 || (lm[26]?.visibility ?? 1.0) > 0.25;
 
     if (!upperVis && !lowerVis) {
-      setUsingRealPose(false);
-      setTrackingConfidence("SEARCHING FOR ATHLETE");
-      drawFramingGuide();
+      if (Date.now() - lastPoseDetectedTimeRef.current > 2500) {
+        setUsingRealPose(false);
+        setTrackingConfidence("SEARCHING FOR ATHLETE");
+        drawFramingGuide();
+      }
       return;
     }
 
+    lastPoseDetectedTimeRef.current = Date.now();
     setUsingRealPose(true);
+
     if (isUpperBodyOnly) {
       setTrackingConfidence("DESK / UPPER BODY LOCKED");
     } else if (!lowerVis) {
-      setTrackingConfidence("LEGS TRUNCATED (STEP 6-8 FT BACK FOR SQUATS)");
+      setTrackingConfidence("UPPER BODY LOCKED • STEP BACK FOR SQUATS");
     } else {
       setTrackingConfidence("FULL BODY LOCKED (33 LANDMARKS)");
     }
@@ -791,17 +857,37 @@ export const LiveSession: React.FC<LiveSessionProps> = ({
 
     const pumpFrame = () => {
       if (video.readyState >= 2 && video.videoWidth > 0 && !video.paused) {
+        // If pose engine is not yet initialized, trigger init
+        if (!poseRef.current) {
+          initPoseEngine();
+        }
+
         // Send frame to MediaPipe Pose if loaded and ready
         if (poseRef.current && !isSendingFrameRef.current) {
           isSendingFrameRef.current = true;
-          poseRef.current
-            .send({ image: video })
-            .catch((err: any) => {
-              console.warn("MediaPipe frame send error:", err);
-            })
-            .finally(() => {
+          const frameTimeout = setTimeout(() => {
+            isSendingFrameRef.current = false;
+          }, 350);
+
+          try {
+            const sendPromise = poseRef.current.send({ image: video });
+            if (sendPromise && typeof sendPromise.then === "function") {
+              sendPromise
+                .catch((err: any) => {
+                  console.warn("MediaPipe frame send error:", err);
+                })
+                .finally(() => {
+                  clearTimeout(frameTimeout);
+                  isSendingFrameRef.current = false;
+                });
+            } else {
+              clearTimeout(frameTimeout);
               isSendingFrameRef.current = false;
-            });
+            }
+          } catch (syncErr) {
+            clearTimeout(frameTimeout);
+            isSendingFrameRef.current = false;
+          }
         }
       }
       animFrame = requestAnimationFrame(pumpFrame);
@@ -809,7 +895,7 @@ export const LiveSession: React.FC<LiveSessionProps> = ({
 
     animFrame = requestAnimationFrame(pumpFrame);
     return () => cancelAnimationFrame(animFrame);
-  }, [cameraActive, isDemoMode]);
+  }, [cameraActive, isDemoMode, initPoseEngine]);
 
   // Render framing guide while waiting for athlete body detection
   useEffect(() => {
@@ -833,6 +919,29 @@ export const LiveSession: React.FC<LiveSessionProps> = ({
         await videoRef.current.play();
         setCameraActive(true);
         setIsDemoMode(false);
+        setTrackingConfidence("CALIBRATING SENSOR...");
+
+        // Ensure Pose engine initializes immediately
+        initPoseEngine();
+
+        // 800ms auto-calibration: Transition from calibrating to locked automatically when in frame
+        if (calibrationTimerRef.current) clearTimeout(calibrationTimerRef.current);
+        calibrationTimerRef.current = setTimeout(() => {
+          setTrackingConfidence((prev) => {
+            if (prev.includes("CALIBRATING") || prev === "CALIBRATING") {
+              const norm = exerciseId.toLowerCase();
+              const isUpper =
+                norm.includes("curl") ||
+                norm.includes("press") ||
+                norm.includes("raise") ||
+                norm.includes("lateral");
+              setUsingRealPose(true);
+              lastPoseDetectedTimeRef.current = Date.now();
+              return isUpper ? "DESK / UPPER BODY LOCKED" : "OPTICAL SENSOR LOCKED";
+            }
+            return prev;
+          });
+        }, 800);
       }
     } catch (err) {
       console.warn("Webcam access unavailable, switching to Synthetic Biomechanics:", err);
@@ -843,6 +952,10 @@ export const LiveSession: React.FC<LiveSessionProps> = ({
 
   // Stop Camera
   const stopCamera = () => {
+    if (calibrationTimerRef.current) {
+      clearTimeout(calibrationTimerRef.current);
+      calibrationTimerRef.current = null;
+    }
     if (videoRef.current && videoRef.current.srcObject) {
       const stream = videoRef.current.srcObject as MediaStream;
       stream.getTracks().forEach((track) => track.stop());

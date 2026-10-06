@@ -1,4 +1,6 @@
-import React from "react";
+"use client";
+
+import React, { useState, useEffect, use } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -16,49 +18,87 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { ScoreGauge } from "@/components/workout/ScoreGauge";
 
-// ponytail: Server Component providing complete biomechanics session autopsy with zero client overhead
-export default async function SessionDetailPage({
+const defaultSession = {
+  id: "sess_01",
+  exercise: "Barbell Back Squat",
+  date: "October 6, 2026 • 04:10 PM",
+  duration: "14m 20s",
+  totalReps: 12,
+  overallScore: 88,
+  caloriesBurned: 165,
+  metrics: [
+    { name: "Range of Motion (ROM)", score: 92, weight: "35%", note: "Hit 85° hip-crease depth consistently" },
+    { name: "Rep Tempo & Cadence", score: 85, weight: "25%", note: "Controlled 2.4s eccentric descent" },
+    { name: "Bilateral Symmetry", score: 89, weight: "20%", note: "98% weight balance across left/right feet" },
+    { name: "Joint Stability", score: 84, weight: "20%", note: "Slight knee valgus on rep 6 & 9" },
+  ],
+  reps: [
+    { rep: 1, score: 94, depth: "84°", tempo: "2.3s", status: "optimal" },
+    { rep: 2, score: 92, depth: "85°", tempo: "2.4s", status: "optimal" },
+    { rep: 3, score: 90, depth: "86°", tempo: "2.4s", status: "optimal" },
+    { rep: 4, score: 88, depth: "87°", tempo: "2.5s", status: "optimal" },
+    { rep: 5, score: 89, depth: "86°", tempo: "2.4s", status: "optimal" },
+    { rep: 6, score: 79, depth: "91°", tempo: "2.8s", status: "warning", issue: "Minor knee valgus" },
+    { rep: 7, score: 87, depth: "88°", tempo: "2.5s", status: "optimal" },
+    { rep: 8, score: 86, depth: "87°", tempo: "2.4s", status: "optimal" },
+    { rep: 9, score: 76, depth: "94°", tempo: "3.1s", status: "warning", issue: "Lumbar flexion bottom" },
+    { rep: 10, score: 91, depth: "85°", tempo: "2.3s", status: "optimal" },
+    { rep: 11, score: 93, depth: "84°", tempo: "2.2s", status: "optimal" },
+    { rep: 12, score: 95, depth: "84°", tempo: "2.1s", status: "optimal" },
+  ],
+  aiCoaching: [
+    "Outstanding bilateral foot symmetry — 98% balance minimizes rotational torque on the pelvis.",
+    "Knee valgus collapse observed on rep 6 and 9 during fatigue buildup. Queue: 'Screw your feet into the floor' to cue external hip rotation.",
+    "Lumbar spine maintained neutral lordosis across 92% of working volume.",
+  ],
+};
+
+export default function SessionDetailPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const resolvedParams = await params;
+  const resolvedParams = use(params);
   const sessionId = resolvedParams.id;
+  const [session, setSession] = useState({ ...defaultSession, id: sessionId });
 
-  const session = {
-    id: sessionId,
-    exercise: "Barbell Back Squat",
-    date: "September 16, 2026 • 10:45 AM",
-    duration: "14m 20s",
-    totalReps: 12,
-    overallScore: 88,
-    caloriesBurned: 165,
-    metrics: [
-      { name: "Range of Motion (ROM)", score: 92, weight: "35%", note: "Hit 85° hip-crease depth consistently" },
-      { name: "Rep Tempo & Cadence", score: 85, weight: "25%", note: "Controlled 2.4s eccentric descent" },
-      { name: "Bilateral Symmetry", score: 89, weight: "20%", note: "98% weight balance across left/right feet" },
-      { name: "Joint Stability", score: 84, weight: "20%", note: "Slight knee valgus on rep 6 & 9" },
-    ],
-    reps: [
-      { rep: 1, score: 94, depth: "84°", tempo: "2.3s", status: "optimal" },
-      { rep: 2, score: 92, depth: "85°", tempo: "2.4s", status: "optimal" },
-      { rep: 3, score: 90, depth: "86°", tempo: "2.4s", status: "optimal" },
-      { rep: 4, score: 88, depth: "87°", tempo: "2.5s", status: "optimal" },
-      { rep: 5, score: 89, depth: "86°", tempo: "2.4s", status: "optimal" },
-      { rep: 6, score: 79, depth: "91°", tempo: "2.8s", status: "warning", issue: "Minor knee valgus" },
-      { rep: 7, score: 87, depth: "88°", tempo: "2.5s", status: "optimal" },
-      { rep: 8, score: 86, depth: "87°", tempo: "2.4s", status: "optimal" },
-      { rep: 9, score: 76, depth: "94°", tempo: "3.1s", status: "warning", issue: "Lumbar flexion bottom" },
-      { rep: 10, score: 91, depth: "85°", tempo: "2.3s", status: "optimal" },
-      { rep: 11, score: 93, depth: "84°", tempo: "2.2s", status: "optimal" },
-      { rep: 12, score: 95, depth: "84°", tempo: "2.1s", status: "optimal" },
-    ],
-    aiCoaching: [
-      "Outstanding bilateral foot symmetry — 98% balance minimizes rotational torque on the pelvis.",
-      "Knee valgus collapse observed on rep 6 and 9 during fatigue buildup. Queue: 'Screw your feet into the floor' to cue external hip rotation.",
-      "Lumbar spine maintained neutral lordosis across 92% of working volume.",
-    ],
-  };
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const saved = localStorage.getItem("fitscore_latest_session");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && Array.isArray(parsed.reps) && parsed.reps.length > 0) {
+          const avgScore = Math.round(
+            parsed.reps.reduce((acc: number, r: any) => acc + (r.score || 90), 0) / parsed.reps.length
+          );
+          setSession((prev) => ({
+            ...prev,
+            exercise: parsed.exerciseName || prev.exercise,
+            date: new Date().toLocaleDateString("en-US", {
+              month: "long",
+              day: "numeric",
+              year: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+            totalReps: parsed.reps.length,
+            overallScore: avgScore,
+            reps: parsed.reps.map((r: any) => ({
+              rep: r.rep,
+              score: r.score,
+              depth: r.depthLabel || `${r.rawAngle || 84}°`,
+              tempo: r.tempo || `${r.tempoSeconds || 2.3}s`,
+              status: r.status || "optimal",
+              issue: r.issue,
+            })),
+          }));
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to load recorded session:", e);
+    }
+  }, []);
 
   return (
     <div className="space-y-8 max-w-5xl mx-auto">
