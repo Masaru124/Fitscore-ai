@@ -62,6 +62,15 @@ function calculateAngle(
   return Number(angle.toFixed(1));
 }
 
+// TEMPO GATE — keeps the rep counter on a controlled, medium/slow cadence.
+// A rep is only counted when it takes at least MIN_REP_DURATION_MS end-to-end AND
+// the athlete actually holds the bottom/peak position for MIN_PEAK_HOLD_MS.
+// Anything faster is rejected (count stays unchanged) instead of racing the counter.
+const MIN_REP_DURATION_MS = 1800;
+const MIN_PEAK_HOLD_MS = 200;
+// Exponential smoothing factor for the angle that drives the FSM (jitter rejection)
+const FSM_SMOOTHING_ALPHA = 0.4;
+
 export const LiveSession: React.FC<LiveSessionProps> = ({
   exerciseName = "Barbell Back Squat",
   exerciseId = "squat",
@@ -108,6 +117,10 @@ export const LiveSession: React.FC<LiveSessionProps> = ({
   const fsmStateRef = useRef<"IDLE" | "IN_REP_ECCENTRIC" | "AT_PEAK" | "IN_REP_CONCENTRIC">("IDLE");
   const peakAngleReachedRef = useRef<number>(180);
   const repStartTimeRef = useRef<number>(0);
+  const peakHoldStartRef = useRef<number>(0);
+  const smoothPrimaryRef = useRef<number | null>(null);
+  const tempoNoticeTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [tempoNotice, setTempoNotice] = useState<string | null>(null);
   const isSendingFrameRef = useRef<boolean>(false);
   const handlePoseResultsRef = useRef<(results: any) => void>(() => {});
   const lastPoseDetectedTimeRef = useRef<number>(0);
@@ -616,17 +629,32 @@ export const LiveSession: React.FC<LiveSessionProps> = ({
     return { calculatedFitScore, statusText, diff };
   };
 
+  // Transient HUD notice shown when a rep is rejected for being rushed
+  const flashTempoNotice = (message: string) => {
+    setTempoNotice(message);
+    if (tempoNoticeTimerRef.current) clearTimeout(tempoNoticeTimerRef.current);
+    tempoNoticeTimerRef.current = setTimeout(() => setTempoNotice(null), 2800);
+  };
+
   // STRICT FINITE STATE MACHINE (FSM) REP COUNTER
   // Rules:
   // - Never increments on a timer.
   // - User must actively move through Eccentric threshold, reach Peak threshold, then return to Lockout.
   // - If user stays still, rep count strictly stays unchanged.
+  // - Reps faster than the tempo gate are rejected, never counted (medium/slow cadence only).
   const processFsmRepLogic = (
-    primary: number,
+    rawPrimary: number,
     secondary: number,
     spine: number
   ) => {
     if (!isLive) return;
+
+    // Light EMA smoothing so landmark jitter can't flick the FSM across thresholds
+    const primary =
+      smoothPrimaryRef.current === null
+        ? rawPrimary
+        : smoothPrimaryRef.current * (1 - FSM_SMOOTHING_ALPHA) + rawPrimary * FSM_SMOOTHING_ALPHA;
+    smoothPrimaryRef.current = primary;
 
     const normalizedId = exerciseId.toLowerCase();
     const isPushupOrSquatOrCurl =
@@ -662,6 +690,7 @@ export const LiveSession: React.FC<LiveSessionProps> = ({
           }
           if (primary <= targetDepth) {
             fsmStateRef.current = "AT_PEAK";
+            peakHoldStartRef.current = Date.now();
             setPhase("PEAK_HOLD");
           } else if (primary > restingLockout) {
             // Aborted rep (didn't reach depth)
@@ -679,10 +708,22 @@ export const LiveSession: React.FC<LiveSessionProps> = ({
 
         case "IN_REP_CONCENTRIC":
           if (primary >= restingLockout) {
-            // Rep Successfully Completed!
-            const repDuration = (Date.now() - repStartTimeRef.current) / 1000;
+            // Rep Successfully Completed (movement-wise)!
+            const now = Date.now();
+            const repDuration = (now - repStartTimeRef.current) / 1000;
             fsmStateRef.current = "IDLE";
             setPhase("IDLE");
+
+            // TEMPO GATE: reject rushed reps so the counter never races
+            const heldDepth = now - peakHoldStartRef.current >= MIN_PEAK_HOLD_MS;
+            const controlledTempo = now - repStartTimeRef.current >= MIN_REP_DURATION_MS;
+            if (!heldDepth || !controlledTempo) {
+              flashTempoNotice(
+                `Rep too fast (${repDuration.toFixed(1)}s) — not counted. Use a medium tempo.`
+              );
+              return;
+            }
+            setTempoNotice(null);
 
             const newReps = repsCountRef.current + 1;
             repsCountRef.current = newReps;
@@ -738,6 +779,7 @@ export const LiveSession: React.FC<LiveSessionProps> = ({
           }
           if (primary >= targetLockout) {
             fsmStateRef.current = "AT_PEAK";
+            peakHoldStartRef.current = Date.now();
             setPhase("PEAK_HOLD");
           } else if (primary < restingShelf) {
             fsmStateRef.current = "IDLE";
@@ -754,10 +796,22 @@ export const LiveSession: React.FC<LiveSessionProps> = ({
 
         case "IN_REP_ECCENTRIC":
           if (primary <= restingShelf + 10) {
-            // Completed Overhead Rep!
-            const repDuration = (Date.now() - repStartTimeRef.current) / 1000;
+            // Completed Overhead Rep (movement-wise)!
+            const now = Date.now();
+            const repDuration = (now - repStartTimeRef.current) / 1000;
             fsmStateRef.current = "IDLE";
             setPhase("IDLE");
+
+            // TEMPO GATE: reject rushed reps so the counter never races
+            const heldPeak = now - peakHoldStartRef.current >= MIN_PEAK_HOLD_MS;
+            const controlledTempo = now - repStartTimeRef.current >= MIN_REP_DURATION_MS;
+            if (!heldPeak || !controlledTempo) {
+              flashTempoNotice(
+                `Rep too fast (${repDuration.toFixed(1)}s) — not counted. Use a medium tempo.`
+              );
+              return;
+            }
+            setTempoNotice(null);
 
             const newReps = repsCountRef.current + 1;
             repsCountRef.current = newReps;
@@ -1061,6 +1115,11 @@ export const LiveSession: React.FC<LiveSessionProps> = ({
     setReps(0);
     setRepsLog([]);
     fsmStateRef.current = "IDLE";
+    smoothPrimaryRef.current = null;
+    peakHoldStartRef.current = 0;
+    repStartTimeRef.current = 0;
+    setTempoNotice(null);
+    if (tempoNoticeTimerRef.current) clearTimeout(tempoNoticeTimerRef.current);
     speakVoice(`Session started for ${exerciseName}. Ready on camera.`);
   };
 
@@ -1687,6 +1746,13 @@ export const LiveSession: React.FC<LiveSessionProps> = ({
           <div className="p-[1px] rounded-2xl bg-gradient-to-b from-white/[0.12] to-white/[0.02] shadow-xl shadow-black/40">
             <div className="rounded-[calc(1rem-1px)] bg-[#0C111E] p-6">
               <RepCounter reps={reps} targetReps={targetReps} phase={phase} />
+
+              {tempoNotice && (
+                <div className="mt-3 flex items-center gap-2 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[11px] font-bold uppercase tracking-wider">
+                  <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+                  <span>{tempoNotice}</span>
+                </div>
+              )}
 
               <div className="mt-4 pt-4 border-t border-white/[0.06] space-y-2">
                 <div className="flex items-center justify-between text-xs">
